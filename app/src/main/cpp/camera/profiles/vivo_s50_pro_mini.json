@@ -1,0 +1,78 @@
+{
+  "id": "vivo_s50_pro_mini",
+  "schema": 2,
+  "name": "vivo S50 Pro mini",
+  "version": 1,
+  "match": {
+    "models": ["V2527A"],
+    "verifiedModels": ["V2527A"],
+    "propertyPrefixes": {
+      "ro.vivo.product.model": "PD2527"
+    }
+  },
+  "lenses": [
+    {
+      "id": "UW",
+      "camera": {
+        "id": "3",
+        "physical": ""
+      },
+      "streams": {
+        "raw": {
+          "format": "RAW16",
+          "width": 3200,
+          "height": 2400
+        }
+      },
+      "image": {
+        "levels": {
+          "static": false,
+          "black": [0, 0, 0, 0],
+          "white": 0
+        }
+      }
+    },
+    {
+      "id": "1x",
+      "camera": {
+        "id": "0",
+        "physical": ""
+      },
+      "streams": {
+        "raw": {
+          "format": "RAW16",
+          "width": 4096,
+          "height": 3072
+        }
+      },
+      "image": {
+        "levels": {
+          "static": false,
+          "black": [0, 0, 0, 0],
+          "white": 0
+        }
+      }
+    },
+    {
+      "id": "3x",
+      "camera": {
+        "id": "4",
+        "physical": ""
+      },
+      "streams": {
+        "raw": {
+          "format": "RAW16",
+          "width": 4096,
+          "height": 3072
+        }
+      },
+      "image": {
+        "levels": {
+          "static": false,
+          "black": [0, 0, 0, 0],
+          "white": 0
+        }
+      }
+    }
+  ]
+}
