@@ -121,16 +121,24 @@ class SingleFrameCoordinator::Impl {
         }
     }
     void configureRawSnapshot(uint32_t width, uint32_t height, uint64_t generation) {
-        width_ = width;
-        height_ = height;
-        generation_ = generation;
-        disabled_ = false;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (stopped_) return;
+            width_ = width;
+            height_ = height;
+            generation_ = generation;
+            disabled_ = false;
+        }
         startAmazePrewarm(width, height);
         for (const auto& entry : entries()) prepare(entry);
     }
     void startAmazePrewarm(uint32_t width, uint32_t height) {
         if (!width || !height) return;
         std::lock_guard<std::mutex> lock(prewarmMutex_);
+        {
+            std::lock_guard<std::mutex> state(mutex_);
+            if (stopped_) return;
+        }
         if (prewarmStarted_) return;
         prewarmStarted_ = true;
         try {
@@ -332,15 +340,15 @@ class SingleFrameCoordinator::Impl {
         // Device destruction uses shutdown(), which drains before Vulkan teardown.
     }
     void shutdown() noexcept {
-        if (stopped_) return;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (stopped_) return;
+            stopped_ = true;
+        }
         cancelAcquisition("camera_shutdown_before_raw");
         {
             std::lock_guard<std::mutex> lock(prewarmMutex_);
             if (prewarmThread_.joinable()) prewarmThread_.join();
-        }
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            stopped_ = true;
         }
         changed_.notify_one();
         if (worker_.joinable()) worker_.join();

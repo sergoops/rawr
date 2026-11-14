@@ -137,8 +137,9 @@ const std::string& backendDescription();
 // Device-lifetime pipeline cache. After loadDevice(), vkCreateComputePipelines
 // substitutes this cache whenever a caller passes VK_NULL_HANDLE, so every
 // engine rebuilt per capture (demosaic, post-demosaic, denoise, tonemap, film,
-// gain map) reuses compiled pipelines instead of recompiling shaders. Pipeline
-// caches are internally synchronized; null if the driver refuses one.
+// gain map) reuses compiled pipelines instead of recompiling shaders. All host
+// access to the cache is serialized by the dispatch cache mutex; null if the
+// driver refuses one.
 VkPipelineCache pipelineCache(VkDevice device);
 // Backs the cache with a file so compiled pipelines survive app restarts.
 // Set before the first pipelineCache(); the driver validates the blob header

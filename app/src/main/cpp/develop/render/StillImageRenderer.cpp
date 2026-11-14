@@ -17,6 +17,7 @@ void StillImageRenderer::setAssetManager(AAssetManager* assetManager) noexcept {
 }
 
 void StillImageRenderer::shutdownFilm() noexcept {
+    std::lock_guard<std::mutex> lifecycle(lifecycleMutex_);
     joinPrepareWorker();
     joinWorker();
     resources_.destroyFilm();
@@ -33,6 +34,7 @@ void StillImageRenderer::clearPreparedLocked() noexcept {
     preparedEngineBuildMs_ = 0.0;
     preparedSetupMs_ = 0.0;
     preparedRequestId_ = 0;
+    preparedContext_ = nullptr;
     preparedWidth_ = 0;
     preparedHeight_ = 0;
     preparedUltraHdr_ = false;
@@ -44,6 +46,7 @@ bool StillImageRenderer::prepare(const rawrcam::vulkan::VulkanContext& context, 
     if (!context.device() || !context.physicalDevice() || !context.queue() || rendered.requestId == 0 ||
         rendered.width == 0 || rendered.height == 0)
         return false;
+    std::lock_guard<std::mutex> lifecycle(lifecycleMutex_);
     joinPrepareWorker();
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
@@ -53,6 +56,7 @@ bool StillImageRenderer::prepare(const rawrcam::vulkan::VulkanContext& context, 
         preparedEngineBuildMs_ = 0.0;
         preparedSetupMs_ = 0.0;
         preparedRequestId_ = rendered.requestId;
+        preparedContext_ = &rendered;
         preparedWidth_ = rendered.width;
         preparedHeight_ = rendered.height;
         preparedUltraHdr_ = rendered.ultraHdrEnabled;
@@ -123,6 +127,7 @@ bool StillImageRenderer::start(const rawrcam::vulkan::VulkanContext& context, st
     if (!context.device() || !context.physicalDevice() || !context.queue() || !sourceImage || !sourceView ||
         rendered.requestId == 0 || rendered.width == 0 || rendered.height == 0)
         return false;
+    std::lock_guard<std::mutex> lifecycle(lifecycleMutex_);
     joinPrepareWorker();
     bool usePrepared = false;
     double preparedEngineBuildMs = 0.0;
@@ -131,8 +136,8 @@ bool StillImageRenderer::start(const rawrcam::vulkan::VulkanContext& context, st
         std::lock_guard<std::mutex> lock(stateMutex_);
         if (busy_ || prepareBusy_ || completion_) return false;
         if (prepared_) {
-            const bool match = preparedRequestId_ == rendered.requestId && preparedWidth_ == rendered.width &&
-                               preparedHeight_ == rendered.height &&
+            const bool match = preparedRequestId_ == rendered.requestId && preparedContext_ == &rendered &&
+                               preparedWidth_ == rendered.width && preparedHeight_ == rendered.height &&
                                preparedUltraHdr_ == rendered.ultraHdrEnabled;
             prepared_ = false;
             if (match && resources_.holdsOutput()) {
@@ -196,6 +201,7 @@ void StillImageRenderer::joinPrepareWorker() noexcept {
     if (prepareWorker_.joinable()) prepareWorker_.join();
 }
 void StillImageRenderer::releasePixels() noexcept {
+    std::lock_guard<std::mutex> lifecycle(lifecycleMutex_);
     joinPrepareWorker();
     joinWorker();
     {
@@ -208,6 +214,7 @@ void StillImageRenderer::releasePixels() noexcept {
 }
 
 void StillImageRenderer::reset() noexcept {
+    std::lock_guard<std::mutex> lifecycle(lifecycleMutex_);
     joinPrepareWorker();
     joinWorker();
     {

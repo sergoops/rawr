@@ -78,6 +78,8 @@ class StillImageRenderer final {
     void reset() noexcept;
 
    private:
+    // Callers hold lifecycleMutex_ so a worker cannot be published or joined
+    // concurrently with releasePixels()/reset().
     void joinWorker() noexcept;
     void joinPrepareWorker() noexcept;
     void clearPreparedLocked() noexcept;
@@ -88,6 +90,7 @@ class StillImageRenderer final {
     RenderResources resources_;
     RenderCommandSession commands_;
     mutable std::mutex stateMutex_;
+    std::mutex lifecycleMutex_;
     std::thread worker_;
     bool busy_ = false;
     std::optional<RenderedStillCompletion> completion_;
@@ -97,6 +100,7 @@ class StillImageRenderer final {
     double preparedEngineBuildMs_ = 0.0;
     double preparedSetupMs_ = 0.0;
     uint64_t preparedRequestId_ = 0;
+    const RenderedStillContext* preparedContext_ = nullptr;
     uint32_t preparedWidth_ = 0;
     uint32_t preparedHeight_ = 0;
     bool preparedUltraHdr_ = false;
