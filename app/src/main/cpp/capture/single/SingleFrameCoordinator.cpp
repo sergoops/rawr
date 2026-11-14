@@ -33,6 +33,7 @@
 #include "color/FilmExposure.h"
 #include "color/WhiteBalance.h"
 #include "develop/HotPixelConceal.h"
+#include "develop/demosaic/AmazeStillProcessor.h"
 #include "develop/demosaic/DualStillProcessor.h"
 #include "develop/demosaic/RcdStillProcessor.h"
 #include "develop/demosaic/VngStillProcessor.h"
@@ -124,7 +125,22 @@ class SingleFrameCoordinator::Impl {
         height_ = height;
         generation_ = generation;
         disabled_ = false;
+        startAmazePrewarm(width, height);
         for (const auto& entry : entries()) prepare(entry);
+    }
+    void startAmazePrewarm(uint32_t width, uint32_t height) {
+        if (!width || !height) return;
+        std::lock_guard<std::mutex> lock(prewarmMutex_);
+        if (prewarmStarted_) return;
+        prewarmStarted_ = true;
+        try {
+            prewarmThread_ = std::thread([this, width, height] {
+                setpriority(PRIO_PROCESS, 0, 5);
+                rawrcam::develop::demosaic::amaze::AmazeStillProcessor::prewarmPipeline(vulkan_, width, height);
+            });
+        } catch (...) {
+            prewarmStarted_ = false;
+        }
     }
     void disableRawSnapshot(const std::string& reason) {
         disabled_ = true;
@@ -319,6 +335,10 @@ class SingleFrameCoordinator::Impl {
         if (stopped_) return;
         cancelAcquisition("camera_shutdown_before_raw");
         {
+            std::lock_guard<std::mutex> lock(prewarmMutex_);
+            if (prewarmThread_.joinable()) prewarmThread_.join();
+        }
+        {
             std::lock_guard<std::mutex> lock(mutex_);
             stopped_ = true;
         }
@@ -471,6 +491,9 @@ class SingleFrameCoordinator::Impl {
     std::deque<std::shared_ptr<Entry>> queue_;
     multiframe::StringMailbox dngBox_, jpegBox_;
     std::thread worker_;
+    std::mutex prewarmMutex_;
+    std::thread prewarmThread_;
+    bool prewarmStarted_ = false;
 };
 
 SingleFrameCoordinator::SingleFrameCoordinator(const rawrcam::vulkan::VulkanContext& vulkanContext,

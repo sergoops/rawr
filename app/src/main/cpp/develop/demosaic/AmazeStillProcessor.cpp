@@ -1,5 +1,7 @@
 #include "develop/demosaic/AmazeStillProcessor.h"
 
+#include <android/log.h>
+
 #include <chrono>
 #include <limits>
 #include <sstream>
@@ -11,6 +13,7 @@
 #include "geometry/CfaPattern.h"
 #include "geometry/RawGeometry.h"
 #include "raw_demosaic/EmbeddedShaders.hpp"
+#include "vulkan/VulkanDispatch.h"
 
 namespace rawrcam::develop::demosaic::amaze {
 
@@ -21,6 +24,39 @@ AmazeStillProcessor::~AmazeStillProcessor() { reset(); }
 std::array<float, 3> AmazeStillProcessor::amazeWhiteBalance(const std::array<float, 4>& wb) noexcept {
     const float green = 0.5f * (wb[1] + wb[2]);
     return {wb[0] / green, 1.0f, wb[3] / green};
+}
+
+void AmazeStillProcessor::prewarmPipeline(const rawrcam::vulkan::VulkanContext& context, uint32_t width,
+                                          uint32_t height) {
+    if (!context.device() || width < 32 || height < 32) return;
+    const auto start = std::chrono::steady_clock::now();
+    __android_log_print(ANDROID_LOG_INFO, "RawrCam", "AMAZE_PREWARM_BEGIN raw=%ux%u", width, height);
+    try {
+        ::amaze::PipelineConfig cfg{};
+        cfg.width = width;
+        cfg.height = height;
+        // The 19 pipelines are independent of the scratch depth; one slot
+        // keeps the temporary footprint small while still populating the
+        // driver's pipeline cache.
+        cfg.tileSlots = 1;
+        ::amaze::VulkanContext algorithmContext{};
+        algorithmContext.physicalDevice = context.physicalDevice();
+        algorithmContext.device = context.device();
+        algorithmContext.queueFamilyIndex = context.queueFamily();
+        algorithmContext.pipelineCache = context.pipelineCache();
+        {
+            ::amaze::AmazePipeline pipeline(algorithmContext, raw_demosaic::embeddedAmazeShaders(), cfg);
+        }
+        rawrcam::vulkan::dispatch::savePipelineCache(context.device());
+        const double ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        __android_log_print(ANDROID_LOG_INFO, "RawrCam", "AMAZE_PREWARM_DONE raw=%ux%u ms=%.1f", width, height, ms);
+    } catch (const std::exception& e) {
+        __android_log_print(ANDROID_LOG_WARN, "RawrCam", "AMAZE_PREWARM_FAIL raw=%ux%u error=%s", width, height,
+                            e.what());
+    } catch (...) {
+        __android_log_print(ANDROID_LOG_WARN, "RawrCam", "AMAZE_PREWARM_FAIL raw=%ux%u error=unknown", width, height);
+    }
 }
 
 void AmazeStillProcessor::configure(const rawrcam::vulkan::VulkanContext& context, std::mutex& queueSubmitMutex,

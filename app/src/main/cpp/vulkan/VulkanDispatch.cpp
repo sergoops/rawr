@@ -266,6 +266,9 @@ void setIf(T& slot, PFN_vkVoidFunction p) {
 }
 PFN_vkCreateComputePipelines gDriverCreateComputePipelines = nullptr;
 std::mutex gCacheMutex;
+// VkPipelineCache is externally synchronized; the still prewarm worker may
+// compile while preview is creating its own pipelines.
+std::mutex gPipelineCreateMutex;
 VkDevice gCacheDevice = VK_NULL_HANDLE;
 VkPipelineCache gCache = VK_NULL_HANDLE;
 std::string gCacheFile;
@@ -276,6 +279,7 @@ VKAPI_ATTR VkResult VKAPI_CALL cachedCreateComputePipelines(VkDevice device, VkP
                                                             const VkAllocationCallbacks* allocator,
                                                             VkPipeline* pipelines) {
     if (cache == VK_NULL_HANDLE) cache = pipelineCache(device);
+    std::lock_guard<std::mutex> lock(gPipelineCreateMutex);
     return gDriverCreateComputePipelines(device, cache, count, infos, allocator, pipelines);
 }
 }  // namespace
