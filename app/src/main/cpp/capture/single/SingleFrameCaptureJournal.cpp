@@ -1,5 +1,6 @@
 #include "capture/single/SingleFrameCaptureJournal.h"
 
+#include <thread>
 #include <utility>
 
 #include "capture/persistence/ProcessingRecipe.h"
@@ -37,7 +38,21 @@ void SingleFrameCaptureJournal::commit(SingleFrameSnapshot& deferred) {
     job.gain = deferred.aePostGain;
     job.filmEnabled = deferred.filmEnabled;
     job.film = deferred.filmLook;
-    persistence::save(durablePath_, job);
+    // The journal is recovery input, not an output. Write/rename it now so the
+    // raw can leave RAM, then flush it in the background while the still is
+    // developed. A process crash still finds the renamed file; only a power
+    // loss before the async fsync can lose the recovery copy.
+    persistence::saveWithoutSync(durablePath_, job);
+    try {
+        std::thread([path = durablePath_] {
+            try {
+                persistence::syncJob(path);
+            } catch (...) {
+            }
+        }).detach();
+    } catch (...) {
+        persistence::syncJob(durablePath_);
+    }
     if (!keepRawResident_.load()) {
         // Waiting payloads leave RAM; the worker reloads them when their turn comes.
         job.frame.raw16.clear();
