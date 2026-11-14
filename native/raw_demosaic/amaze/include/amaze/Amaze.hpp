@@ -107,6 +107,13 @@ class AmazePipeline {
     // record()). Takes precedence over setPassBoundary.
     void setCommandBoundary(std::function<VkCommandBuffer()> boundary);
 
+    // Debug profiling: set debug.rawr.amaze_pass_timing=1 before construction.
+    // After the caller's fence, collectPassTimings() reads GPU timestamps and
+    // passTimingsMs() returns the summed time per pass across all tile batches.
+    static constexpr uint32_t kPassCount = 19;
+    void collectPassTimings() noexcept;
+    std::array<double, kPassCount> passTimingsMs() const noexcept;
+
     const PipelineConfig& config() const;
     uint64_t currentAllocatedBytes() const;
     uint64_t peakAllocatedBytes() const;

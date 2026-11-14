@@ -3,6 +3,8 @@
 // Provenance and credits: shaders/amaze.wgsl and ../NOTICE.md.
 #include "amaze/Amaze.hpp"
 
+#include <sys/system_properties.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -50,6 +52,7 @@ constexpr std::array<const char*, 19> kPasses = {
 constexpr size_t kChoosePass = 3, kHvwtPass = 9, kPmwtPass = 13;
 constexpr uint32_t kChooseLocal = 64;
 static_assert(kTile <= 256, "row-sequential passes use one lane per tile column");
+static_assert(kPasses.size() == AmazePipeline::kPassCount, "AMaZE pass count changed");
 // GLSL passes use "main"; naga keeps the WGSL entry point name.
 bool isGlsl(size_t pass) { return pass == 0 || pass + 1 == kPasses.size(); }
 // amaze_finish and amaze_export cover the tile's output region, the rest its source.
@@ -136,6 +139,10 @@ struct AmazePipeline::Impl {
     VkDescriptorSet set = VK_NULL_HANDLE;
     OwnedBuffer params;
     void* paramsMapped = nullptr;
+    VkQueryPool timingPool = VK_NULL_HANDLE;
+    uint32_t timingBatches = 0;
+    float timestampPeriod = 0.0f;
+    std::array<uint64_t, AmazePipeline::kPassCount> timingNs{};
     // Binding placeholders for the input the configured mode does not read.
     OwnedImage dummyPacked;
     OwnedBuffer dummyNormalized;
@@ -241,6 +248,25 @@ struct AmazePipeline::Impl {
                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         check(vkMapMemory(ctx.device, params.memory, 0, VK_WHOLE_SIZE, 0, &paramsMapped), "AMaZE map params failed");
 
+        char timingProp[PROP_VALUE_MAX] = {};
+        const bool timingRequested =
+            __system_property_get("debug.rawr.amaze_pass_timing", timingProp) > 0 && timingProp[0] == '1';
+        if (timingRequested && props.limits.timestampPeriod > 0.0f) {
+            uint32_t familyCount = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(ctx.physicalDevice, &familyCount, nullptr);
+            std::vector<VkQueueFamilyProperties> families(familyCount);
+            vkGetPhysicalDeviceQueueFamilyProperties(ctx.physicalDevice, &familyCount, families.data());
+            if (ctx.queueFamilyIndex < familyCount && families[ctx.queueFamilyIndex].timestampValidBits > 0) {
+                timingBatches = uint32_t(batches);
+                timestampPeriod = props.limits.timestampPeriod;
+                VkQueryPoolCreateInfo qp{};
+                qp.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+                qp.queryType = VK_QUERY_TYPE_TIMESTAMP;
+                qp.queryCount = 2u * AmazePipeline::kPassCount * timingBatches;
+                check(vkCreateQueryPool(ctx.device, &qp, ctx.allocator, &timingPool), "AMaZE timing query pool failed");
+            }
+        }
+
         VkSamplerCreateInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         si.magFilter = si.minFilter = VK_FILTER_NEAREST;
@@ -329,6 +355,7 @@ struct AmazePipeline::Impl {
 
     void cleanup() noexcept {
         if (ctx.device == VK_NULL_HANDLE) return;
+        if (timingPool) vkDestroyQueryPool(ctx.device, timingPool, ctx.allocator), timingPool = VK_NULL_HANDLE;
         for (auto& p : pipelines)
             if (p) vkDestroyPipeline(ctx.device, p, ctx.allocator), p = VK_NULL_HANDLE;
         for (auto& m : modules)
@@ -472,8 +499,11 @@ struct AmazePipeline::Impl {
         writeParams(wb);
         bindBatch(packedView, packedLayout, floatInput, out);
         computeBarrier(cmd);  // covers scratch reuse after a preceding frame
+        if (timingPool)
+            vkCmdResetQueryPool(cmd, timingPool, 0, 2u * AmazePipeline::kPassCount * timingBatches);
         for (size_t first = 0; first < tiles.size(); first += batchTiles) {
             const uint32_t count = uint32_t(std::min<size_t>(batchTiles, tiles.size() - first));
+            const uint32_t batchIndex = uint32_t(first / batchTiles);
             // Each dispatch covers the batch's largest tile; shaders bound-check per tile.
             uint32_t srcW = 0, srcH = 0, outW = 0, outH = 0;
             for (size_t k = 0; k < count; ++k) {
@@ -484,7 +514,10 @@ struct AmazePipeline::Impl {
             const uint32_t offset = uint32_t((first / batchTiles) * batchParamStride);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &set, 1, &offset);
             for (size_t pass = 0; pass < kPasses.size(); ++pass) {
+                const uint32_t query = 2u * (batchIndex * AmazePipeline::kPassCount + uint32_t(pass));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelines[pass]);
+                if (timingPool)
+                    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingPool, query);
                 if (pass == kChoosePass) {
                     vkCmdDispatch(cmd, (2 * (srcW + srcH) + kChooseLocal - 1) / kChooseLocal, 1, count);
                 } else if (pass == kHvwtPass || pass == kPmwtPass) {
@@ -494,6 +527,8 @@ struct AmazePipeline::Impl {
                     const uint32_t h = coversOutput(pass) ? outH : srcH;
                     vkCmdDispatch(cmd, (w + kLocal - 1) / kLocal, (h + kLocal - 1) / kLocal, count);
                 }
+                if (timingPool)
+                    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, timingPool, query + 1);
                 computeBarrier(cmd);
             }
             if (commandBoundary)
@@ -532,6 +567,28 @@ void AmazePipeline::record(VkCommandBuffer c, const NormalizedBayerBufferView& i
 void AmazePipeline::setPassBoundary(std::function<void()> boundary) { impl_->passBoundary = std::move(boundary); }
 void AmazePipeline::setCommandBoundary(std::function<VkCommandBuffer()> boundary) {
     impl_->commandBoundary = std::move(boundary);
+}
+void AmazePipeline::collectPassTimings() noexcept {
+    if (!impl_->timingPool || impl_->timingBatches == 0) return;
+    const uint32_t count = 2u * kPassCount * impl_->timingBatches;
+    std::vector<uint64_t> values(count);
+    const VkResult result =
+        vkGetQueryPoolResults(impl_->ctx.device, impl_->timingPool, 0, count, values.size() * sizeof(uint64_t),
+                              values.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+    if (result != VK_SUCCESS) return;
+    impl_->timingNs.fill(0);
+    for (uint32_t batch = 0; batch < impl_->timingBatches; ++batch) {
+        for (uint32_t pass = 0; pass < kPassCount; ++pass) {
+            const size_t index = (size_t(batch) * kPassCount + pass) * 2u;
+            if (values[index + 1] >= values[index]) impl_->timingNs[pass] += values[index + 1] - values[index];
+        }
+    }
+}
+std::array<double, AmazePipeline::kPassCount> AmazePipeline::passTimingsMs() const noexcept {
+    std::array<double, kPassCount> out{};
+    const double scale = double(impl_->timestampPeriod) / 1.0e6;
+    for (uint32_t i = 0; i < kPassCount; ++i) out[i] = double(impl_->timingNs[i]) * scale;
+    return out;
 }
 const PipelineConfig& AmazePipeline::config() const { return impl_->cfg; }
 uint64_t AmazePipeline::currentAllocatedBytes() const { return impl_->liveBytes; }

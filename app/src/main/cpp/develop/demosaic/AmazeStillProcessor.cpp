@@ -1,8 +1,10 @@
 #include "develop/demosaic/AmazeStillProcessor.h"
 
-#include <android/log.h>
+#include <sys/system_properties.h>
 
+#include <android/log.h>
 #include <chrono>
+#include <cstdlib>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -16,6 +18,21 @@
 #include "vulkan/VulkanDispatch.h"
 
 namespace rawrcam::develop::demosaic::amaze {
+namespace {
+
+// Experimental sweep knob for the tile-batch depth. 16 is the production
+// default; larger batches reduce submit/barrier round trips at the cost of
+// scratch memory. Kept behind a debug property so release behavior is stable.
+uint32_t amazeTileSlots() noexcept {
+    char value[PROP_VALUE_MAX] = {};
+    if (__system_property_get("debug.rawr.amaze_tile_slots", value) <= 0) return 16;
+    char* end = nullptr;
+    const unsigned long parsed = std::strtoul(value, &end, 10);
+    if (end == value || *end != '\0' || parsed == 0 || parsed > 64) return 16;
+    return static_cast<uint32_t>(parsed);
+}
+
+}  // namespace
 
 AmazeStillProcessor::AmazeStillProcessor(Diagnostic diagnostic) : worker_(diagnostic), runtime_("AMAZE", diagnostic) {}
 
@@ -118,6 +135,8 @@ void AmazeStillProcessor::ensureRuntimeResources() {
     cfg.height = height_;
     cfg.pattern = pattern_;
     cfg.inputMode = ::amaze::InputMode::PackedCfaRgba16fImage;
+    cfg.tileSlots = amazeTileSlots();
+    __android_log_print(ANDROID_LOG_INFO, "RawrCam", "AMAZE_STILL_TILE_SLOTS slots=%u", cfg.tileSlots);
 
     const char* reason = nullptr;
     if (!::amaze::AmazePipeline::validateConfig(cfg, &reason)) {
@@ -191,8 +210,11 @@ bool AmazeStillProcessor::start(const rawrcam::imaging::RawSnapshot& frame,
             ensureRuntimeResources();
             done.setupMs =
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+            const auto uploadStart = std::chrono::steady_clock::now();
             VkCommandBuffer command = runtime_.beginFrame(*raw, blackPhysical, whiteLevel, whiteBalanceRggb,
                                                           lensShading, highlightReconstructionEnabled);
+            const double uploadMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - uploadStart).count();
             raw.reset();
             done.persistentBytes = currentAllocatedBytes();
             // Bounded submissions (upload/packing, then each tile batch) so the
@@ -220,11 +242,37 @@ bool AmazeStillProcessor::start(const rawrcam::imaging::RawSnapshot& frame,
             input.rawWidth = width_;
             input.rawHeight = height_;
             input.pattern = pattern_;
+            const auto recordStart = std::chrono::steady_clock::now();
             pipeline_->record(command, input, output, amazeWhiteBalance(whiteBalanceRggb));
+            const double recordMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - recordStart).count();
 
+            const auto submitStart = std::chrono::steady_clock::now();
             runtime_.submit(runtime_.currentCommand());
             emit("AMAZE_STILL_GPU_SUBMITTED requestId=" + std::to_string(requestId));
             runtime_.waitForCompletion();
+            const double submitWaitMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - submitStart).count();
+            pipeline_->collectPassTimings();
+            const auto passMs = pipeline_->passTimingsMs();
+            if (passMs[0] > 0.0) {
+                static constexpr const char* names[] = {
+                    "import", "gradients", "candidates", "choose", "cddiff", "weights", "nyquist",
+                    "nyquist_vote", "area", "hvwt_seq", "green", "refine", "diagonal", "pmwt_seq",
+                    "rbint", "correct", "chroma", "finish", "export"};
+                std::ostringstream line;
+                line << "AMAZE_STILL_PASS_TIMES requestId=" << requestId;
+                double passSumMs = 0.0;
+                for (size_t i = 0; i < passMs.size(); ++i) {
+                    line << ' ' << names[i] << '=' << passMs[i];
+                    passSumMs += passMs[i];
+                }
+                const double totalMs =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+                line << " setupMs=" << done.setupMs << " uploadMs=" << uploadMs << " recordMs=" << recordMs
+                     << " submitWaitMs=" << submitWaitMs << " passSumMs=" << passSumMs << " totalMs=" << totalMs;
+                __android_log_print(ANDROID_LOG_INFO, "RawrCam", "%s", line.str().c_str());
+            }
             done.success = true;
         } catch (const std::exception& e) {
             done.error = e.what();
