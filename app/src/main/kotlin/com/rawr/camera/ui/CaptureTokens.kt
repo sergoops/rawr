@@ -27,6 +27,7 @@ internal object CaptureColors {
 internal object CaptureDimens {
     val TopBarHeight = 48.dp
     val MonitorHeight = 22.dp
+    val PerformanceHudHeight = 18.dp
     val VideoControlsClassicHeight = 174.dp
     // Lens 30 + compact shutter row 78 + video record row 62.
     val CompactVideoControlsMinimumHeight = 170.dp

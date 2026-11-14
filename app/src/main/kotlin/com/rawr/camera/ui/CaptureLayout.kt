@@ -63,7 +63,9 @@ internal fun PhysicalCaptureLayout(
         } else {
             CaptureDimens.VideoControlsClassicHeight
         }
-        val viewfinderMaxHeight = (maxHeight - CaptureDimens.TopBarHeight -
+        val performanceHudHeight =
+            if (state.showPerformanceHud) CaptureDimens.PerformanceHudHeight else 0.dp
+        val viewfinderMaxHeight = (maxHeight - CaptureDimens.TopBarHeight - performanceHudHeight -
             CaptureDimens.MonitorHeight * 2 - controlsHeight - CaptureDimens.VideoMonitorBottomInset)
             .coerceAtLeast(1.dp)
         val viewfinderWidth = minOf(maxWidth, viewfinderMaxHeight * .75f)
@@ -74,6 +76,7 @@ internal fun PhysicalCaptureLayout(
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             CaptureTopBar(state, dispatch, onOpenSettings, videoLocked = videoLocked)
             monitor()
+            PerformanceHud(state)
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 CaptureViewfinder(
                     state = state,
