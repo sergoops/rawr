@@ -25,6 +25,25 @@ def test_parse_camera_dump_extracts_fps_and_stabilization(tmp_path):
     assert parsed["videoStabilizationMode"] == "ON"
 
 
+def test_parse_camera_dump_handles_dumpsys_blocks(tmp_path):
+    dump = tmp_path / "camera-3a.txt"
+    dump.write_text(
+        "        android.control.aeTargetFpsRange (10005): int32[2]\n"
+        "          [60 60 ]\n"
+        "        android.control.videoStabilizationMode (10011): byte[1]\n"
+        "          [ON ]\n"
+        "        android.lens.opticalStabilizationMode (80004): byte[1]\n"
+        "          [ON ]\n"
+        "        org.quic.camera2.properties_sensor.SensorCurrentMode (80560009): byte[1]\n"
+        "          [16 ]\n"
+    )
+    parsed = parse_camera_dump(dump)
+    assert parsed["aeTargetFpsRange"] == "[60,60]"
+    assert parsed["videoStabilizationMode"] == "ON"
+    assert parsed["opticalStabilizationMode"] == "ON"
+    assert parsed["SensorCurrentMode"] == "16"
+
+
 def test_build_timeline_writes_table(tmp_path):
     before = tmp_path / "before"
     during = tmp_path / "during"

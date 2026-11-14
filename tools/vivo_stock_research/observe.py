@@ -11,6 +11,10 @@ from pathlib import Path
 PHASES = ("before", "during", "after")
 
 _KV = re.compile(r"^\s*([A-Za-z0-9_.\-]+)\s*[:=]\s*(.+?)\s*$")
+_DUMP = re.compile(
+    r"^\s*([A-Za-z0-9_.\-]+)(?:\s+\([^)]*\))?\s*:\s*(.*?)\s*$"
+)
+_TYPE = re.compile(r"^(?:int32|int64|byte|float|double|rational)\[[^\]]*\]$")
 _THERMAL = re.compile(r"(?i)thermal\s*status\s*[:=]\s*([A-Za-z0-9]+)")
 
 
@@ -68,16 +72,45 @@ def capture_phase(adb: str, phase: str, out: Path) -> dict[str, Path]:
     return written
 
 
+def _store(parsed: dict[str, str], key: str, value: str) -> None:
+    parsed[key] = value
+    parsed[key.rsplit(".", 1)[-1]] = value
+
+
+def _array_value(line: str) -> str:
+    text = line.strip()
+    if not (text.startswith("[") and text.endswith("]")):
+        return text
+    values = text[1:-1].replace(",", " ").split()
+    if len(values) == 1:
+        return values[0]
+    return "[" + ",".join(values) + "]"
+
+
 def parse_camera_dump(path: Path) -> dict[str, str]:
-    """Extract ``key=value`` / ``key: value`` pairs from a camera dump."""
+    """Extract key/value pairs from simple or ``dumpsys media.camera`` output."""
 
     parsed: dict[str, str] = {}
     if not path.is_file():
         return parsed
-    for line in path.read_text(errors="replace").splitlines():
+    lines = path.read_text(errors="replace").splitlines()
+    for index, line in enumerate(lines):
         match = _KV.match(line)
         if match is not None:
-            parsed[match.group(1)] = match.group(2)
+            _store(parsed, match.group(1), match.group(2))
+            continue
+
+        match = _DUMP.match(line)
+        if match is None:
+            continue
+        key, value = match.group(1), match.group(2).strip()
+        if not value or _TYPE.match(value):
+            for following in lines[index + 1 :]:
+                if following.strip():
+                    value = _array_value(following)
+                    break
+        if value:
+            _store(parsed, key, value)
     return parsed
 
 
@@ -121,7 +154,12 @@ def build_timeline(phases: dict[str, Path], out: Path) -> Path:
                     "opticalStabilizationMode",
                     "android.lens.opticalStabilizationMode",
                 ),
-                _first(parsed, "sensorMode", "android.control.sensorMode"),
+                _first(
+                    parsed,
+                    "sensorMode",
+                    "android.control.sensorMode",
+                    "SensorCurrentMode",
+                ),
                 _thermal_status(directory / "thermal.txt"),
                 "yes" if (directory / "watch.txt").is_file() else "no",
             ]
