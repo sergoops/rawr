@@ -44,6 +44,11 @@ Raw16CpuSnapshotResult copyCompletedRaw16AhbToPacked(AHardwareBuffer* ahb, uint3
 // device logs show whether a dark still had dark sensor data.
 [[nodiscard]] std::string stillRawContentStatsLine(const RawSnapshot& snapshot);
 
+// Whether the still path should compute RAW_CONTENT_STATS. Debug builds keep
+// the bring-up default; release builds skip the full-frame CPU scan unless
+// `debug.rawr.raw_content_stats=1` explicitly turns it back on.
+[[nodiscard]] bool stillRawContentStatsEnabled() noexcept;
+
 // Camera RAW pixel layout of an AImage, from its AHB format (RAW16 or RAW10).
 [[nodiscard]] std::optional<RawPixelFormat> rawPixelFormatOf(AImage* image) noexcept;
 

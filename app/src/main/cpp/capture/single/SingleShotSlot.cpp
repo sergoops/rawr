@@ -219,9 +219,11 @@ bool SingleShotSlot::captureMatchedFrame(AImage* image, AHardwareBuffer* ahb, in
     expectedOptimizedRequestId_.reset();
     completedFrame_ = std::make_shared<const rawrcam::imaging::RawSnapshot>(std::move(slot_));
     const auto& completed = *completedFrame_;
-    {
-        // Always to logcat: tells a black/garbage sensor buffer apart from a
-        // development problem when a device only gives us an exported logcat.
+    if (rawrcam::imaging::stillRawContentStatsEnabled()) {
+        // Tells a black/garbage sensor buffer apart from a development problem
+        // when a device only gives us an exported logcat. Off the release
+        // shutter path because it scans the full RAW snapshot on the capture
+        // thread.
         const std::string stats = rawrcam::imaging::stillRawContentStatsLine(completed);
         __android_log_print(ANDROID_LOG_INFO, "RawrCamNative", "%s", stats.c_str());
         emit(stats);
