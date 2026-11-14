@@ -28,7 +28,8 @@ class NativeCaptureScreenController(
     /** A lens switch was accepted (persisted as the next launch's lens). */
     private val onLensSelected: (String) -> Unit = {},
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
-    private val foregroundToken: () -> Any?
+    private val foregroundToken: () -> Any?,
+    private val readMemory: () -> ProcessMemorySample = { ProcessMemorySample() }
 ) : CaptureScreenController {
     private val mutableState =
         MutableStateFlow(
@@ -57,6 +58,7 @@ class NativeCaptureScreenController(
     private val selfTimer = CaptureSelfTimer(scope, state, ::update, ::enqueueStillCapture, foregroundToken)
     // Once per process: the CPU path is a device/stream property, not a per-frame event.
     private var rawCpuIngressNotified = false
+    private var lastMemorySampleMs = 0L
 
     init {
         // Native starts on the first lens of its profile; the snapshot's
@@ -74,6 +76,25 @@ class NativeCaptureScreenController(
                     overlayTriggers.autofocusStatus(focus.status, focus.mode == FocusMode.Mf)
                 }
                 updateFaces(NativeCameraUiSnapshot.parseFaces(coordinator.faceDetectionsSnapshot()))
+                if (state.value.showPerformanceHud) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (now - lastMemorySampleMs >= 1_000L) {
+                        lastMemorySampleMs = now
+                        val sample = readMemory()
+                        update { current ->
+                            current.copy(
+                                performanceHud = current.performanceHud.copy(
+                                    totalPssKb = sample.totalPssKb,
+                                    nativePssKb = sample.nativePssKb
+                                )
+                            )
+                        }
+                    }
+                    val depth = captureQueue.depth()
+                    if (state.value.pressQueueDepth != depth) {
+                        update { it.copy(pressQueueDepth = depth) }
+                    }
+                }
 
                 // Applied exposure is display telemetry, not part of the AE loop.
                 // 10 Hz is responsive enough and avoids unnecessary JNI/JSON/UI churn;

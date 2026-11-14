@@ -134,7 +134,8 @@ class CaptureViewModel(application: Application) : AndroidViewModel(application)
             onCapturePreferencesChanged = { before, after ->
                 settingsEditor.update { it.withCapturePreferenceChanges(before, after) }
                 settingsSync.updatePreviewCrop(after.captureMode, after.videoResolution)
-            }
+            },
+            readMemory = com.rawr.camera.integration.ProcessMemoryReader()::read
         )
 
     private val settingsSync by lazy {
