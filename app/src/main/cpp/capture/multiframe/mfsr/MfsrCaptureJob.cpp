@@ -318,6 +318,9 @@ void MfsrCaptureJob::runStages(Published& published) {
     };
     MultiframeOutputAdapter outputAdapter;
     bool outputAdapterReady = false;
+    std::shared_ptr<RawSnapshot> baseFrame;
+    rawrcam::encoding::dng::DngCaptureContext baseContext;
+    bool baseReady = false;
     if (baseRequested) try {
             outputAdapter.initialize(ctx.vulkan.physicalDevice(), ctx.vulkan.device(), ctx.vulkan.queueFamily(),
                                      queueSubmit, ctx.rawWidth, ctx.rawHeight);
@@ -327,21 +330,31 @@ void MfsrCaptureJob::runStages(Published& published) {
             baseReadMs = wallMs(baseReadBegin);
             outputAdapter.reset();
             outputAdapterReady = false;
-            auto baseFrame = makeCaptured(std::move(basePacked));
+            baseFrame = makeCaptured(std::move(basePacked));
             baseDng.imageDescription = std::string(rawrcam::encoding::kCapturedWith) + "\nMultiframe base frame\n";
-            auto context = std::move(baseDng);
-            rawrcam::capture::persistence::attachFrameRecipes(context, *baseFrame);
-            if (work->awaitDurable) work->awaitDurable();  // publishing: the journal must be durable first
-            baseStarted = baseWriter.start(baseFrame, std::move(context));
+            baseContext = std::move(baseDng);
+            rawrcam::capture::persistence::attachFrameRecipes(baseContext, *baseFrame);
+            baseReady = true;
+        } catch (const std::exception& e) {
+            baseContext.outputFd.reset();
+            failDng(baseDisplayName, std::string("base_output_failed: ") + e.what());
+            basePublished = true;
+        }
+    auto startBaseDng = [&]() {
+        if (!baseReady || baseStarted) return;
+        try {
+            if (work->awaitDurable) work->awaitDurable();
+            baseStarted = baseWriter.start(baseFrame, std::move(baseContext));
             if (!baseStarted) {
                 failDng(baseDisplayName, "base_dng_start_rejected");
                 basePublished = true;
             }
         } catch (const std::exception& e) {
-            baseDng.outputFd.reset();
+            baseContext.outputFd.reset();
             failDng(baseDisplayName, std::string("base_output_failed: ") + e.what());
             basePublished = true;
         }
+    };
 
     std::optional<rawr::raw_gpu_pipeline::BurstRunResult> mergeResult;
     std::shared_ptr<rawrcam::imaging::RawSnapshot> mergedFrame;
@@ -438,6 +451,7 @@ void MfsrCaptureJob::runStages(Published& published) {
                                               tuning, dumpRzslRequested, queueSubmit, mergeSubmit);
         }
         if (work->awaitDurable) work->awaitDurable();  // outputs follow: the journal must be durable first
+        startBaseDng();
         // Merge timings feed both horizons (merged DNG and JPEG). Populate
         // here — not inside the merged-DNG gate below — so JPEG-only captures
         // (no merged DNG requested) still report the merge/alignment stages
@@ -1019,6 +1033,7 @@ void MfsrCaptureJob::runStages(Published& published) {
         }
         dumpRzsl();
     } catch (const std::exception& e) {
+        try { startBaseDng(); } catch (...) {}
         mergedDng.outputFd.reset();
         if (!mergedPublished) {
             failDng(mergedDisplayName, std::string("merge_failed: ") + e.what());
