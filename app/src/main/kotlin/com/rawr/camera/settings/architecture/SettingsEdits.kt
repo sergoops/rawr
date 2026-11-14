@@ -93,5 +93,6 @@ internal fun SettingsValues.capturePreferences() = com.rawr.camera.architecture.
     videoResolution = videoResolutionForId(videoResolutionId),
     videoFps = videoFpsOrDefault(videoFps),
     videoLogEnabled = videoLogEnabled,
-    selfTimer = selfTimer
+    selfTimer = selfTimer,
+    showPerformanceHud = showPerformanceHud
 )

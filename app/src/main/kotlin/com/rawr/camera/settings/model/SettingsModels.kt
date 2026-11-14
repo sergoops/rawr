@@ -656,6 +656,8 @@ data class SettingsValues(
     val videoLogEnabled: Boolean = false,
     val videoLogProfile: VideoLogProfile = VideoLogProfile.LogC3,
     val pipelineDiagnosticsEnabled: Boolean = false,
+    /** Capture-screen debug HUD showing PSS, press queue, and native reservations. */
+    val showPerformanceHud: Boolean = false,
     val experimentalZeroCopyEnabled: Boolean = true,
     val experimentalMultiframeEnabled: Boolean = false,
     val saveBaseDng: Boolean = true,

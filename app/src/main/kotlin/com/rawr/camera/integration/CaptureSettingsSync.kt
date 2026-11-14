@@ -2,6 +2,7 @@ package com.rawr.camera.integration
 
 import com.rawr.camera.architecture.CaptureScreenController
 import com.rawr.camera.architecture.SetControlSurfaceStyle
+import com.rawr.camera.architecture.SetShowPerformanceHud
 import com.rawr.camera.architecture.SyncToneControls
 import com.rawr.camera.model.CaptureMode
 import com.rawr.camera.settings.model.*
@@ -35,6 +36,7 @@ internal class CaptureSettingsSync(
         previewCoordinator.setPersistentDiagnosticsEnabled(true)
         previewCoordinator.setInternalTraceCaptureEnabled(true)
         syncSetting({ it.controlSurfaceStyle }) { controller.dispatch(SetControlSurfaceStyle(it)) }
+        syncSetting({ it.showPerformanceHud }) { controller.dispatch(SetShowPerformanceHud(it)) }
         syncSetting({ it.oisEnabledPreference }) { previewCoordinator.setOisEnabled(it) }
         syncSetting({ it.lensProfiles }) { previewCoordinator.setLensProfiles(it) }
         // Start on the last used lens. Startup only: later values come from

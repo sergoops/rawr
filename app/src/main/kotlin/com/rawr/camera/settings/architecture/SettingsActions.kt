@@ -103,6 +103,8 @@ data class SetUserLutAfterAction(val profileId: String, val value: AfterLutActio
 
 data class SetPipelineDiagnosticsEnabled(val enabled: Boolean) : SettingsApplicationAction
 
+data class SetPerformanceHudEnabled(val enabled: Boolean) : SettingsApplicationAction
+
 data class SetExperimentalZeroCopyEnabled(val enabled: Boolean) : SettingsApplicationAction
 
 data class SetSaveBaseDng(val enabled: Boolean) : SettingsApplicationAction

@@ -14,6 +14,10 @@ internal fun reduceAppSettings(
         state.withValues(state.values.copy(pipelineDiagnosticsEnabled = action.enabled))
     }
 
+    is SetPerformanceHudEnabled -> {
+        state.withValues(state.values.copy(showPerformanceHud = action.enabled))
+    }
+
     is SetExperimentalZeroCopyEnabled -> {
         state.withValues(state.values.copy(experimentalZeroCopyEnabled = action.enabled))
     }

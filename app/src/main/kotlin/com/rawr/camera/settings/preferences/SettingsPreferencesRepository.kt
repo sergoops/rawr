@@ -564,6 +564,7 @@ class SettingsPreferencesRepository(context: Context, private val defaults: Sett
             lastLensId = p[Keys.lastLensId]?.takeIf { it.isNotBlank() },
             rawrBaseTone = rawrBaseTone,
             pipelineDiagnosticsEnabled = p[Keys.pipelineDiagnosticsEnabled] ?: d.pipelineDiagnosticsEnabled,
+            showPerformanceHud = p[Keys.showPerformanceHud] ?: d.showPerformanceHud,
             experimentalZeroCopyEnabled = p[Keys.experimentalZeroCopyEnabled] ?: d.experimentalZeroCopyEnabled,
             experimentalMultiframeEnabled = p[Keys.experimentalMultiframeEnabled] ?: d.experimentalMultiframeEnabled,
             persistentEngineEnabled = p[Keys.persistentEngineEnabled] ?: d.persistentEngineEnabled,
@@ -781,6 +782,7 @@ class SettingsPreferencesRepository(context: Context, private val defaults: Sett
         p[Keys.rawrToneSaturation] = v.rawrBaseTone.saturation
         p[Keys.rawrToneVibrance] = v.rawrBaseTone.vibrance
         p[Keys.pipelineDiagnosticsEnabled] = v.pipelineDiagnosticsEnabled
+        p[Keys.showPerformanceHud] = v.showPerformanceHud
         p[Keys.experimentalZeroCopyEnabled] = v.experimentalZeroCopyEnabled
         p[Keys.experimentalMultiframeEnabled] = v.experimentalMultiframeEnabled
         p[Keys.persistentEngineEnabled] = v.persistentEngineEnabled
@@ -1052,6 +1054,7 @@ class SettingsPreferencesRepository(context: Context, private val defaults: Sett
         val rawrToneSaturation = floatPreferencesKey("profile_tone_rawr_saturation")
         val rawrToneVibrance = floatPreferencesKey("profile_tone_rawr_vibrance")
         val pipelineDiagnosticsEnabled = booleanPreferencesKey("debug_pipeline_diagnostics_enabled")
+        val showPerformanceHud = booleanPreferencesKey("performance_hud_enabled")
         val experimentalZeroCopyEnabled = booleanPreferencesKey("debug_experimental_zero_copy_enabled")
         val experimentalMultiframeEnabled = booleanPreferencesKey("experimental_multiframe_enabled")
         val persistentEngineEnabled = booleanPreferencesKey("persistent_engine_enabled")
