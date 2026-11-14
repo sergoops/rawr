@@ -396,6 +396,10 @@ bool canReserve(const std::string& filesDir, uint64_t rawBytes, bool cpuAcquisit
     uint64_t storage = 0, cpu = 0;
     return admitLocked(filesDir, rawBytes, cpuAcquisition, storage, cpu);
 }
+BudgetSnapshot budgetSnapshot() noexcept {
+    std::lock_guard<std::mutex> lock(budgetMutex);
+    return {reservedCpu, reservedDisk};
+}
 // Frozen pre-v5 head layout, read-only: the 20-value tuning, the resolved
 // noise selection and the DNG noise-mode byte (both now unused, discarded).
 struct LegacyMultiframeTuning {

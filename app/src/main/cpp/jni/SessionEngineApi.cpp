@@ -235,6 +235,7 @@ std::string cameraControlSnapshot(EngineHandle h) {
 
         const auto [previewGeneration, previewTimestamp] = engine(h)->livePreviewState();
         const auto [fullSize, acquiring] = engine(h)->fullSizeCaptureState();
+        const auto budget = engine(h)->captureBudgetBytes();
         json += std::string(",\"rawCpuIngress\":") + (engine(h)->rawCpuIngressActive() ? "true" : "false") +
                 ",\"livePreviewGeneration\":" + std::to_string(previewGeneration) +
                 ",\"livePreviewTimestamp\":" + std::to_string(previewTimestamp) +
@@ -245,7 +246,9 @@ std::string cameraControlSnapshot(EngineHandle h) {
                 ",\"fullSizeBinnedStills\":" +
                 std::to_string(rawrcam::capture::fullSizeFallbacks().binnedStills.load(std::memory_order_relaxed)) +
                 ",\"fullSizeBurstsToSingle\":" +
-                std::to_string(rawrcam::capture::fullSizeFallbacks().burstsToSingle.load(std::memory_order_relaxed)) + "}";
+                std::to_string(rawrcam::capture::fullSizeFallbacks().burstsToSingle.load(std::memory_order_relaxed)) +
+                ",\"reservedCpuBytes\":" + std::to_string(budget.cpuBytes) +
+                ",\"reservedDiskBytes\":" + std::to_string(budget.diskBytes) + "}";
     }
     return json;
 }

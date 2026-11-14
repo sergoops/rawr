@@ -102,6 +102,11 @@ class SessionEngine {
     }
     // Full-size route availability and outstanding RAW acquisition, for the hold notice.
     std::pair<bool, bool> fullSizeCaptureState();
+    struct CaptureBudgetBytes {
+        uint64_t cpuBytes = 0;
+        uint64_t diskBytes = 0;
+    };
+    [[nodiscard]] CaptureBudgetBytes captureBudgetBytes() const noexcept;
     std::pair<uint64_t, int64_t> livePreviewState() const {
         return swapchainRenderer_.livePresentation();
     }

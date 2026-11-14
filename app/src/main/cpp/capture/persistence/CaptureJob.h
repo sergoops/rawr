@@ -36,6 +36,12 @@ std::string jobPath(const std::string& filesDir, const std::string& name);
 std::shared_ptr<void> reserve(const std::string& filesDir, uint64_t rawBytes, bool cpuAcquisition);
 // Whether reserve() would admit the frame now (nothing is reserved).
 bool canReserve(const std::string& filesDir, uint64_t rawBytes, bool cpuAcquisition);
+struct BudgetSnapshot {
+    uint64_t cpuBytes = 0;
+    uint64_t diskBytes = 0;
+};
+// Current reservation totals, sampled under the same lock as reserve().
+[[nodiscard]] BudgetSnapshot budgetSnapshot() noexcept;
 void save(const std::string& path, CaptureJob& job, const std::function<std::vector<uint8_t>(size_t)>& readFrame = {});
 // Single-frame variant: write and rename the journal, but leave the fsync to
 // syncJob() so the disk flush can overlap JPEG encoding.
