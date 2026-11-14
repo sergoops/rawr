@@ -52,6 +52,13 @@ bool SingleFrameCaptureDevelop::start(const std::shared_ptr<const rawrcam::imagi
                                                               jpegContext.output.deviceRotationDegrees);
         context_ = makeSingleFrameRenderContext(captured, tonemapParams, aePostGain, turns, filmEnabled, filmLook,
                                                 &request, diagnostic_);
+        // Build the still-render images and engines while the demosaic runs.
+        // start() consumes the prepared state only when the capture keys match.
+        if (!renderer_.prepare(vulkanContext_, queueSubmitMutex_, *context_,
+                               secondaryQueue_ ? vulkanContext_.multiframeQueue() : VK_NULL_HANDLE,
+                               secondaryQueue_ ? &vulkanContext_.mfSubmitMutex() : nullptr)) {
+            emit("STILL_RENDER_PREPARE_SKIPPED requestId=" + std::to_string(captured.requestId));
+        }
 
         // Own hot-pixel conceal for the JPEG/rendered copy only. DNG bytes
         // stay untouched; the map is also recorded in DNGPrivateData.
@@ -142,6 +149,10 @@ bool SingleFrameCaptureDevelop::start(const std::shared_ptr<const rawrcam::imagi
     }
 }
 void SingleFrameCaptureDevelop::failPendingJpeg(uint64_t id, const std::string& error) {
+    // A failed demosaic never reaches renderer_.start(), so release any
+    // resources prepared concurrently with it instead of leaving the
+    // renderer busy until the next capture reset.
+    renderer_.releasePixels();
     develop::rendered::RenderedStillCompletion done{};
     done.requestId = id;
     done.error = error;
