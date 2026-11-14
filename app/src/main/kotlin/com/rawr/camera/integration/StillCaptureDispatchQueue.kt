@@ -1,6 +1,7 @@
 package com.rawr.camera.integration
 
 import com.rawr.camera.model.CaptureOutputFormat
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -16,12 +17,21 @@ internal class StillCaptureDispatchQueue(
 ) {
     private val requests = Channel<CaptureOutputFormat>(Channel.UNLIMITED)
     private val mutex = Mutex()
+    private val pending = AtomicInteger(0)
 
     init {
         scope.launch {
-            for (format in requests) mutex.withLock { capture(format) }
+            for (format in requests) {
+                try {
+                    mutex.withLock { capture(format) }
+                } finally {
+                    pending.decrementAndGet()
+                }
+            }
         }
     }
+
+    fun depth(): Int = pending.get()
 
     /** Admits synchronously in press order when [owned] still holds; returns whether the request was queued. */
     @Synchronized
@@ -32,7 +42,11 @@ internal class StillCaptureDispatchQueue(
                 return false
             }
             onQueued(format)
-            check(requests.trySend(format).isSuccess)
+            pending.incrementAndGet()
+            if (requests.trySend(format).isFailure) {
+                pending.decrementAndGet()
+                error("capture request queue rejected an admitted request")
+            }
             return true
         } catch (error: RuntimeException) {
             onRejected(format, error)

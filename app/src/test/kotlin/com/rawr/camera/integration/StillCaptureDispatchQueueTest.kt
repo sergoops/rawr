@@ -45,6 +45,19 @@ class StillCaptureDispatchQueueTest {
     }
 
     @Test
+    fun depthTracksAdmittedAndCompletedRequests() = runTest {
+        val admitted = mutableListOf<CaptureOutputFormat>()
+        val acquired = mutableListOf<CaptureOutputFormat>()
+        val queue = StillCaptureDispatchQueue(backgroundScope, admitted::add, acquired::add,
+            onRejected = { _, _ -> })
+        repeat(8) { queue.enqueue(CaptureOutputFormat.DngAndJpeg) }
+        assertEquals(8, queue.depth())
+        runCurrent()
+        assertEquals(8, acquired.size)
+        assertEquals(0, queue.depth())
+    }
+
+    @Test
     fun slowPreparationDoesNotBlockFurtherPressesOrLetCompletionOvertakeRegistration() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val entered = CountDownLatch(1)
