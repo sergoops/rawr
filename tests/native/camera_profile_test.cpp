@@ -129,6 +129,17 @@ void testProfileMatching() {
     assert(routeForLens(pro, "3.5x")->cameraId == "3");
     // Camera 5 is the same telephoto sensor as camera 3, so it is not offered as a fourth lens.
     assert(!routeForLens(pro, "8x"));
+    // S50 Pro mini (Snapdragon 8 Gen 5): exact, tested model.
+    m = matchBuiltInProfile(props({{"ro.product.model", "V2527A"}}));
+    assert(m.profileId == "vivo_s50_pro_mini" && m.rule == "model" && m.verified);
+    // Unlisted variants are caught by vivo's project code.
+    m = matchBuiltInProfile(props({{"ro.product.model", "V2527X"}, {"ro.vivo.product.model", "PD2527"}}));
+    assert(m.profileId == "vivo_s50_pro_mini" && m.rule == "property:ro.vivo.product.model" && !m.verified);
+    const auto mini = builtInCameraProfile("vivo_s50_pro_mini");
+    assert(mini.lenses.size() == 3);
+    assert(routeForLens(mini, "UW")->cameraId == "3");
+    assert(routeForLens(mini, "1x")->cameraId == "0");
+    assert(routeForLens(mini, "3x")->cameraId == "4");
     // Other phones (X200 Ultra) and missing properties get generic.
     m = matchBuiltInProfile(props({{"ro.product.model", "V2454A"}, {"ro.vivo.product.model", "PD2454"}}));
     assert(m.profileId == "generic" && m.rule == "none" && !m.verified);
@@ -208,6 +219,31 @@ void testProfiles() {
         for (float b : r.levels.blackRggb) assert(b == e.black);
     }
 
+    // S50 Pro mini: three binned RAW16 lenses with dynamic levels and no live gate.
+    {
+        const auto& mini = builtInCameraProfile("vivo_s50_pro_mini");
+        struct MiniExpected {
+            const char* lens;
+            const char* camera;
+            uint32_t width, height;
+        };
+        const MiniExpected miniTable[] = {
+            {"UW", "3", 3200, 2400},
+            {"1x", "0", 4096, 3072},
+            {"3x", "4", 4096, 3072},
+        };
+        assert(mini.lenses.size() == std::size(miniTable));
+        for (size_t i = 0; i < std::size(miniTable); ++i) {
+            const auto& e = miniTable[i];
+            const auto& r = mini.lenses[i];
+            assert(r.lensId == e.lens && r.cameraId == e.camera);
+            assert(r.preferredStream.format == RawPixelFormat::Raw16);
+            assert(r.preferredStream.width == e.width && r.preferredStream.height == e.height);
+            assert(r.vendorKeys.empty() && !r.levels.isStatic && r.levels.white == 0);
+            assert(r.vendorGate.empty() && !r.photoStream && !r.highResLive);
+        }
+    }
+
     const auto& generic = builtInCameraProfile("generic");
     assert(generic.lenses.size() == 1);
     const auto only = routeForLens(generic, "1x");
@@ -225,7 +261,7 @@ void testProfiles() {
 void testProfileJson() {
     using namespace rawrcam::camera;
     // Round trip keeps every field of the built-in profiles.
-    for (const char* id : {"vivo_x300_ultra", "generic"}) {
+    for (const char* id : {"vivo_x300_ultra", "vivo_s50_pro_mini", "generic"}) {
         const auto& original = builtInCameraProfile(id);
         const auto json = serializeCameraProfile(original);
         std::string error;
