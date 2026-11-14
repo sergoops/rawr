@@ -5,6 +5,7 @@ import pytest
 
 from tools.vivo_stock_research.extract import (
     ExtractionReport,
+    _prepare_local,
     preflight,
     pull_targets,
     write_manifest,
@@ -62,3 +63,11 @@ def test_report_defaults_are_independent():
     second = ExtractionReport()
     first.pulled.append("x")
     assert second.pulled == []
+
+
+def test_prepare_local_removes_previous_tree(tmp_path):
+    target = tmp_path / "vendor/etc"
+    (target / "stale").mkdir(parents=True)
+    (target / "stale" / "old.json").write_text("old")
+    _prepare_local(target)
+    assert not target.exists()

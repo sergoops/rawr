@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -76,6 +77,15 @@ def preflight(adb: str = "adb") -> dict[str, object]:
 
 def _reason(result: subprocess.CompletedProcess[str]) -> str:
     return (result.stderr or result.stdout).strip()
+
+
+def _prepare_local(path: Path) -> None:
+    """Remove a previous pull so adb does not nest ``etc/etc`` on rerun."""
+
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
 
 
 def _sha256_path(path: Path) -> tuple[int, str]:
@@ -172,6 +182,7 @@ def pull_targets(adb: str, out: Path, selected: list[Target]) -> ExtractionRepor
 
         local = output_path(out, remote)
         local.parent.mkdir(parents=True, exist_ok=True)
+        _prepare_local(local)
         pull = _run(adb, ["pull", remote, str(local)])
         if pull.returncode != 0:
             report.failed.append(
