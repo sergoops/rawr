@@ -9,6 +9,7 @@ def test_targets_include_pd2527_and_exclude_app_data():
     items = targets("PD2527_A_16.0.19.12.W10")
     remotes = {item.remote for item in items}
     assert "/vendor/etc" in remotes
+    assert "/vendor/bin/hw" in remotes
     assert "/system/lib64/libcameraservice.so" in remotes
     assert not any(path.startswith("/data/data/") for path in remotes)
 

@@ -55,6 +55,7 @@ def targets(build: str) -> list[Target]:
         Target("/system_ext/etc/permissions", "configs", True),
         Target("/vendor/lib64/hw", "libs", True),
         Target("/vendor/lib64/camera", "libs", True),
+        Target("/vendor/bin/hw", "libs", True),
         Target("/system/lib64/libcameraservice.so", "libs", True),
         Target("/system/lib64/libcamera_client.so", "libs", True),
         Target("/system/lib64/libcamera2ndk.so", "libs", True),
