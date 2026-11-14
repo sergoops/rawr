@@ -91,7 +91,8 @@ class PersistentSettingsController(
             is ReportAntiFlickerApplication,
             is ReportImageToneApplication -> reduceRuntimeSettings(state, action, defaults)
 
-            is SetSaveLocationTree, is SetPipelineDiagnosticsEnabled, is SetExperimentalZeroCopyEnabled,
+            is SetSaveLocationTree, is SetPipelineDiagnosticsEnabled, is SetPerformanceHudEnabled,
+            is SetExperimentalZeroCopyEnabled,
             is SetSaveBaseDng, is SetExperimentalMultiframeEnabled, is SetUltraHdrEnabled, is SetAePriorityDisabled,
             is SetRawrAeSettings,
             is SetPersistentEngineEnabled, is SetCustomGpuDriverEnabled, is SetCustomGpuDriverInstalled,

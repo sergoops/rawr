@@ -189,6 +189,11 @@ data class CaptureUiState(
     val faceDetections: List<FaceDetection> = emptyList(),
     val spotAe: SpotAeUiState = SpotAeUiState(),
     val pendingCaptures: List<PendingCapture> = emptyList(),
+    /** Debug HUD visibility; no capture behavior changes when off. */
+    val showPerformanceHud: Boolean = false,
+    val performanceHud: PerformanceHudState = PerformanceHudState(),
+    /** Synchronous press-queue depth sampled only while the HUD is visible. */
+    val pressQueueDepth: Int = 0,
     val thumbnailRevision: Int = 0,
     val captureFlash: Boolean = false,
     val controlSurfaceStyle: ControlSurfaceStyle = ControlSurfaceStyle.Basic,

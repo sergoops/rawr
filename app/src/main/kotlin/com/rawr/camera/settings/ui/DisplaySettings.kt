@@ -60,6 +60,14 @@ internal fun MonitoringSettings(state: SettingsUiState, dispatch: SettingsDispat
                 dispatch,
                 testTag = SettingsTestTags.row("Monitoring", "peaking_sensitivity")
             )
+            SettingDivider()
+            SettingsSwitchRow(
+                title = "Performance HUD",
+                checked = state.values.showPerformanceHud,
+                supportingText = "Show PSS, press queue, and capture-budget reservations over the viewfinder.",
+                testTag = SettingsTestTags.row("Monitoring", "performance_hud"),
+                onCheckedChange = { dispatch.invoke(SetPerformanceHudEnabled(it)) }
+            )
         }
     }
 }

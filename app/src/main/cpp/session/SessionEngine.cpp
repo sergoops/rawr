@@ -12,6 +12,7 @@
 
 #include "camera/NativeCameraController.h"
 #include "capture/persistence/AcquiredRawJournal.h"
+#include "capture/persistence/CaptureJob.h"
 #include "color/ColorCalibration.h"
 #include "color/WhiteBalance.h"
 #include "diagnostics/logging/NativeLog.h"
@@ -541,6 +542,10 @@ rawrcam::metadata::CameraContextMetadataPtr SessionEngine::claimFullSizeStill(
 std::pair<bool, bool> SessionEngine::fullSizeCaptureState() {
     std::lock_guard<std::mutex> lock(fullSize_.mutex);
     return {fullSize_.context != nullptr, !fullSize_.requestIds.empty() || !fullSize_.burstTags.empty()};
+}
+SessionEngine::CaptureBudgetBytes SessionEngine::captureBudgetBytes() const noexcept {
+    const auto budget = capture::persistence::budgetSnapshot();
+    return {budget.cpuBytes, budget.diskBytes};
 }
 bool SessionEngine::fullSizeStillPending() {
     std::lock_guard<std::mutex> lock(fullSize_.mutex);

@@ -24,6 +24,7 @@ object CaptureReducer {
                 videoFps = action.videoFps.coerceVideoFps(),
                 videoLogEnabled = action.videoLogEnabled,
                 selfTimer = action.selfTimer,
+                showPerformanceHud = action.showPerformanceHud,
                 // A restored preference never resumes a mid-flight countdown.
                 selfTimerRemainingMs = null
             )
@@ -63,6 +64,10 @@ object CaptureReducer {
 
         is SetControlSurfaceStyle -> {
             state.copy(controlSurfaceStyle = action.style)
+        }
+
+        is SetShowPerformanceHud -> {
+            state.copy(showPerformanceHud = action.enabled)
         }
 
         is SetCaptureLayout -> {

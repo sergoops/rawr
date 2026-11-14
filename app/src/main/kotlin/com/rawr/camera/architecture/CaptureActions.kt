@@ -22,7 +22,8 @@ data class RestoreCapturePreferences(
     val videoFps: Int = 30,
     val videoLogEnabled: Boolean = false,
     val selfTimer: com.rawr.camera.settings.model.SelfTimer =
-        com.rawr.camera.settings.model.SelfTimer.Off
+        com.rawr.camera.settings.model.SelfTimer.Off,
+    val showPerformanceHud: Boolean = false
 ) : PresentationCaptureAction
 
 data class SetOrientation(val value: Orientation) : PresentationCaptureAction
@@ -36,6 +37,8 @@ data object ToggleWhiteBalancePanel : PresentationCaptureAction
 data object CloseTopBarPanels : PresentationCaptureAction
 
 data class SetControlSurfaceStyle(val style: ControlSurfaceStyle) : PresentationCaptureAction
+
+data class SetShowPerformanceHud(val enabled: Boolean) : PresentationCaptureAction
 
 data class SetCaptureLayout(val layout: CaptureControlLayout) : PresentationCaptureAction
 

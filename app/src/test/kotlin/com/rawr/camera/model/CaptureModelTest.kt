@@ -16,6 +16,7 @@ import com.rawr.camera.architecture.SelectLens
 import com.rawr.camera.architecture.SetCaptureLayout
 import com.rawr.camera.architecture.SetCaptureMode
 import com.rawr.camera.architecture.SetCaptureSelfTimer
+import com.rawr.camera.architecture.SetShowPerformanceHud
 import com.rawr.camera.architecture.StartSelfTimerCountdown
 import com.rawr.camera.architecture.TickSelfTimer
 import com.rawr.camera.architecture.ToggleFilmSim
@@ -609,6 +610,28 @@ class CaptureModelTest {
 
         assertTrue(CaptureReducer.reduce(CaptureUiState(capabilities), restore(true)).filmSimEnabled)
         assertFalse(CaptureReducer.reduce(CaptureUiState(capabilities), restore(false)).filmSimEnabled)
+    }
+
+    @Test
+    fun performanceHudToggleAndRestoreArePresentationOnly() {
+        val on = CaptureReducer.reduce(CaptureUiState(capabilities), SetShowPerformanceHud(true))
+        assertTrue(on.showPerformanceHud)
+        assertFalse(CaptureReducer.reduce(on, SetShowPerformanceHud(false)).showPerformanceHud)
+
+        val restored = CaptureReducer.reduce(
+            CaptureUiState(capabilities),
+            RestoreCapturePreferences(
+                jpegEnabled = true,
+                grid = GridMode.Off,
+                armedOverlays = emptySet(),
+                falseColorManual = false,
+                activeScopes = emptyList(),
+                waveformMode = WaveformMode.Luma,
+                filmSimEnabled = false,
+                showPerformanceHud = true
+            )
+        )
+        assertTrue(restored.showPerformanceHud)
     }
 
     @Test
