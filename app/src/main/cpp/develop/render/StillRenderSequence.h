@@ -6,5 +6,6 @@ RenderedStillCompletion executeStillRender(RenderResources& resources, RenderCom
                                            const RenderDeviceContext& device, const RenderedStillContext& rendered,
                                            VkImage sourceImage, VkImageView sourceView, VkImage clipStateImage,
                                            VkImageView clipStateView, const std::string& filesDir,
-                                           const RenderResources::Diagnostic& emit);
+                                           const RenderResources::Diagnostic& emit, bool resourcesPrepared,
+                                           double preparedEngineBuildMs);
 }  // namespace rawrcam::develop::rendered

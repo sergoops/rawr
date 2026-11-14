@@ -51,6 +51,14 @@ class StillImageRenderer final {
                // chain on the multiframe queue so preview submits on queue0 no
                // longer wait behind the whole still render in one FIFO.
                VkQueue queueOverride = VK_NULL_HANDLE, std::mutex* queueSubmitMutexOverride = nullptr);
+    // Creates the per-capture images/readback buffers and builds the still
+    // engines before the demosaic output is ready. The worker overlaps this
+    // CPU/Vulkan setup with the demosaic GPU pass; start() consumes the
+    // prepared resources when the keys match, otherwise it falls back to the
+    // ordinary in-render preparation. Safe to skip for any caller.
+    bool prepare(const rawrcam::vulkan::VulkanContext& context, std::mutex& queueSubmitMutex,
+                 const RenderedStillContext& rendered, VkQueue queueOverride = VK_NULL_HANDLE,
+                 std::mutex* queueSubmitMutexOverride = nullptr);
     std::optional<RenderedStillCompletion> pollCompletion();
     [[nodiscard]] bool busy() const noexcept;
     [[nodiscard]] const void* pixelData() const noexcept { return resources_.outputView().pixels; }
@@ -70,7 +78,11 @@ class StillImageRenderer final {
     void reset() noexcept;
 
    private:
+    // Callers hold lifecycleMutex_ so a worker cannot be published or joined
+    // concurrently with releasePixels()/reset().
     void joinWorker() noexcept;
+    void joinPrepareWorker() noexcept;
+    void clearPreparedLocked() noexcept;
     void emit(const std::string& line) const;
 
     std::string filesDir_;
@@ -78,9 +90,21 @@ class StillImageRenderer final {
     RenderResources resources_;
     RenderCommandSession commands_;
     mutable std::mutex stateMutex_;
+    std::mutex lifecycleMutex_;
     std::thread worker_;
     bool busy_ = false;
     std::optional<RenderedStillCompletion> completion_;
+    std::thread prepareWorker_;
+    bool prepareBusy_ = false;
+    bool prepared_ = false;
+    double preparedEngineBuildMs_ = 0.0;
+    double preparedSetupMs_ = 0.0;
+    uint64_t preparedRequestId_ = 0;
+    const RenderedStillContext* preparedContext_ = nullptr;
+    uint32_t preparedWidth_ = 0;
+    uint32_t preparedHeight_ = 0;
+    bool preparedUltraHdr_ = false;
+    std::string prepareError_;
 };
 
 }  // namespace rawrcam::develop::rendered

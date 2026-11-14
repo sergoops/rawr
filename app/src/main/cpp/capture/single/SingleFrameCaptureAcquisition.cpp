@@ -82,8 +82,10 @@ bool SingleFrameCaptureAcquisition::beginDeferredSnapshot(AImage* imageLease, AH
                     deferred.frame->sourcePixelStrideBytes = deferred.copyResult.sourcePixelStrideBytes;
                     keepBinnedCorner(*deferred.frame);
                     remosaicBlockCfaStill(*deferred.frame);
-                    __android_log_print(ANDROID_LOG_INFO, "RawrCamNative", "%s",
-                                        imaging::stillRawContentStatsLine(*deferred.frame).c_str());
+                    if (imaging::stillRawContentStatsEnabled()) {
+                        __android_log_print(ANDROID_LOG_INFO, "RawrCamNative", "%s",
+                                            imaging::stillRawContentStatsLine(*deferred.frame).c_str());
+                    }
                     journal_.commit(deferred);
                 }
             } catch (const std::exception& e) {

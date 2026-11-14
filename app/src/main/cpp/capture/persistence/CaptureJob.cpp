@@ -582,19 +582,29 @@ void AcquiredRawJournal::commit(const std::string& path, CaptureJob& job) {
 
 namespace {
 void save(const std::string& path, CaptureJob& job, const std::function<std::vector<uint8_t>(size_t)>& readFrame,
-          const std::function<void(size_t, std::vector<uint8_t>&)>* fillFrame, std::vector<uint8_t>* buffer);
+          const std::function<void(size_t, std::vector<uint8_t>&)>* fillFrame, std::vector<uint8_t>* buffer,
+          bool sync);
 }  // namespace
 void save(const std::string& path, CaptureJob& job,
           const std::function<void(size_t, std::vector<uint8_t>&)>& fillFrame) {
     std::vector<uint8_t> buffer;
-    save(path, job, std::function<std::vector<uint8_t>(size_t)>{}, &fillFrame, &buffer);
+    save(path, job, std::function<std::vector<uint8_t>(size_t)>{}, &fillFrame, &buffer, true);
 }
 void save(const std::string& path, CaptureJob& job, const std::function<std::vector<uint8_t>(size_t)>& readFrame) {
-    save(path, job, readFrame, nullptr, nullptr);
+    save(path, job, readFrame, nullptr, nullptr, true);
+}
+void saveWithoutSync(const std::string& path, CaptureJob& job) {
+    save(path, job, std::function<std::vector<uint8_t>(size_t)>{}, nullptr, nullptr, false);
+}
+void syncJob(const std::string& path) {
+    syncFile(path);
+    const auto dir = std::filesystem::path(path).parent_path();
+    syncFile(dir.string(), true);
 }
 namespace {
 void save(const std::string& path, CaptureJob& job, const std::function<std::vector<uint8_t>(size_t)>& readFrame,
-          const std::function<void(size_t, std::vector<uint8_t>&)>* fillFrame, std::vector<uint8_t>* buffer) {
+          const std::function<void(size_t, std::vector<uint8_t>&)>* fillFrame, std::vector<uint8_t>* buffer,
+          bool sync) {
     const uint64_t n = payloadSize(job);
     const auto dir = std::filesystem::path(path).parent_path();
     std::filesystem::create_directories(dir);
@@ -625,9 +635,9 @@ void save(const std::string& path, CaptureJob& job, const std::function<std::vec
         stream.flush();
         if (!stream) throw std::runtime_error("capture_job_flush_failed");
         stream.close();
-        syncFile(temporary);
+        if (sync) syncFile(temporary);
         std::filesystem::rename(temporary, path);
-        syncFile(dir.string(), true);
+        if (sync) syncFile(dir.string(), true);
     } catch (...) {
         std::error_code ec;
         std::filesystem::remove(temporary, ec);

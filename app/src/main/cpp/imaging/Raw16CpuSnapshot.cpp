@@ -1,5 +1,6 @@
 #include "imaging/Raw16CpuSnapshot.h"
 
+#include <sys/system_properties.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -144,6 +145,21 @@ Raw16CpuSnapshotResult copyCompletedRaw16AhbToPacked(AHardwareBuffer* ahb, uint3
     if (out.gpuAcquireFenceFd >= 0 && out.gpuAcquireFenceFd != acquireFenceFd) close(out.gpuAcquireFenceFd);
     out.gpuAcquireFenceFd = -1;
     return out;
+}
+
+bool stillRawContentStatsEnabled() noexcept {
+    // Read once per process. The still stats scan is diagnostic telemetry; keep
+    // it off the shutter path in release unless a developer opts in.
+    static const bool enabled = [] {
+        char value[PROP_VALUE_MAX] = {};
+        const int len = __system_property_get("debug.rawr.raw_content_stats", value);
+#ifdef NDEBUG
+        return len > 0 && value[0] == '1';
+#else
+        return !(len > 0 && value[0] == '0');
+#endif
+    }();
+    return enabled;
 }
 
 std::string stillRawContentStatsLine(const RawSnapshot& snapshot) {

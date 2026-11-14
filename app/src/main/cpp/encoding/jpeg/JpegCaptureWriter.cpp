@@ -457,9 +457,11 @@ bool JpegCaptureWriter::startUltraHdr(std::uint64_t requestId, const void* rgba8
                      float fittedMax = context.ultraHdr.gainMapMaxLog2;
                      const unsigned char* mapEncodePixels = mapPixels;
                      const auto fitT0 = std::chrono::steady_clock::now();
+                     UltraHdrFitTimings fitTimings;
                      const bool didFit =
                          fitAndRemapMap(mapPixels, mapWidth, mapHeight, context.ultraHdr, fittedMap, fittedMax,
-                                        pixels, width, height);
+                                        pixels, width, height, &fitTimings);
+                     const auto fitCoreT1 = std::chrono::steady_clock::now();
                      bool colorRestored = false;
                      if (didFit) {
                          mapEncodePixels = fittedMap.data();
@@ -474,12 +476,17 @@ bool JpegCaptureWriter::startUltraHdr(std::uint64_t requestId, const void* rgba8
                          }
                      }
                      const auto fitT1 = std::chrono::steady_clock::now();
+                     const double fitCoreMs =
+                         std::chrono::duration<double, std::milli>(fitCoreT1 - fitT0).count();
+                     const double restoreMs =
+                         std::chrono::duration<double, std::milli>(fitT1 - fitCoreT1).count();
                      __android_log_print(ANDROID_LOG_INFO, "RawrCamNative",
-                                         "JPEG_UHDR_FIT requestId=%llu fit=%d max=%.2f base=%.2f/%.2f fitMs=%.1f mapPx=%ux%u color=%d range=%.2f/%.2f",
+                                         "JPEG_UHDR_FIT requestId=%llu fit=%d max=%.2f base=%.2f/%.2f fitMs=%.1f fitCoreMs=%.1f histMs=%.1f remapMs=%.1f restoreMs=%.1f mapPx=%ux%u color=%d range=%.2f/%.2f",
                                          (unsigned long long)requestId, didFit ? 1 : 0, fittedMax,
                                          context.ultraHdr.baseShare, context.ultraHdr.baseExponent,
-                                         std::chrono::duration<double, std::milli>(fitT1 - fitT0).count(), mapWidth,
-                                         mapHeight, colorRestored ? 1 : 0, context.ultraHdr.gainMapMinLog2,
+                                         std::chrono::duration<double, std::milli>(fitT1 - fitT0).count(), fitCoreMs,
+                                         fitTimings.histogramMs, fitTimings.remapMs, restoreMs, mapWidth, mapHeight,
+                                         colorRestored ? 1 : 0, context.ultraHdr.gainMapMinLog2,
                                          context.ultraHdr.gainMapMaxLog2);
                      if (!encodeParallel(mapEncodePixels, mapWidth, mapHeight, mapQuality, TJSAMP_444, requestId,
                                          &mapBuf, &mapSize) &&

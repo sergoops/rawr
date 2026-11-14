@@ -71,6 +71,11 @@ class AmazeStillProcessor final {
     // Baseline WB (physical RGGB gains) as AMaZE RGB gains with green = 1.
     static std::array<float, 3> amazeWhiteBalance(const std::array<float, 4>& whiteBalanceRggb) noexcept;
 
+    // Compiles AMaZE's compute pipelines into the device pipeline cache without
+    // keeping the per-shot scratch/output. Used after the capture window is
+    // configured so the first JPEG does not pay the driver shader compile.
+    static void prewarmPipeline(const rawrcam::vulkan::VulkanContext& context, uint32_t width, uint32_t height);
+
    private:
     void joinWorker() noexcept;
     void ensureRuntimeResources();

@@ -276,6 +276,10 @@ VKAPI_ATTR VkResult VKAPI_CALL cachedCreateComputePipelines(VkDevice device, VkP
                                                             const VkAllocationCallbacks* allocator,
                                                             VkPipeline* pipelines) {
     if (cache == VK_NULL_HANDLE) cache = pipelineCache(device);
+    // VkPipelineCache is externally synchronized for every host access, not
+    // just creation: serialize create against save/destroy too.  pipelineCache()
+    // has already released gCacheMutex, so this is not recursive.
+    std::lock_guard<std::mutex> lock(gCacheMutex);
     return gDriverCreateComputePipelines(device, cache, count, infos, allocator, pipelines);
 }
 }  // namespace

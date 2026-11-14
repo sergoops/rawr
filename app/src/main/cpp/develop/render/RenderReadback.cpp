@@ -238,6 +238,7 @@ void completeReadback(RenderResources& resources, RenderCommandSession& commands
     // No full-image checksum here: a byte-wise pass over mapped memory cost
     // ~45 ms per renderer slider frame and only fed a diagnostic log line.
     done.pixelBytes = static_cast<uint64_t>(resources.outputView().bytes);
+#ifndef NDEBUG
     if (rendered.ultraHdrEnabled && resources.outputView().gainmapPixels != nullptr &&
         resources.outputView().gainmapWidth > 0 && resources.outputView().gainmapHeight > 0) {
         // Map content telemetry on the already-mapped readback: max
@@ -274,6 +275,7 @@ void completeReadback(RenderResources& resources, RenderCommandSession& commands
             (unsigned long long)rendered.requestId, (double)done.gainmapMaxStored, (double)done.gainmapBoostedFrac,
             (double)done.gainmapMeanStored, gainmapClipUsed ? 1 : 0);
     }
+#endif
     // Post-fence window: diagnostic dumps (when enabled), readback
     // mapping and the integrity checksum. Completes the EXIF
     // attribution: total == setup + GPU parts + gaps + readback.

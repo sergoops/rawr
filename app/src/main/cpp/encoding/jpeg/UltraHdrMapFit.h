@@ -7,6 +7,7 @@
 // above knee = fitted - kneeBelow; chroma d' = T*tanh(d/T) around the
 // per-pixel mean of shouldered channels.
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -37,13 +38,21 @@ inline float fastTanh(float x) {
     return a + (b - a) * f;
 }
 
+// Optional phase timings for profiling; production callers pass nullptr.
+struct UltraHdrFitTimings {
+    double histogramMs = 0.0;
+    double remapMs = 0.0;
+};
+
 // Returns false (leave pixels + metadata wide) when the map is degenerate
 // or gamma != 1 (codes wouldn't decode linear). base (RGBA8 sRGB, baseW x
 // baseH) drives the luma baseline floor; nullptr skips it. Map texels sample
 // the base at the nearest scaled pixel (identity for full-res maps).
 inline bool fitAndRemapMap(const unsigned char* src, std::uint32_t w, std::uint32_t h,
                            const color::UltraHdrParams& uh, std::vector<unsigned char>& dst, float& fittedMax,
-                           const unsigned char* base = nullptr, std::uint32_t baseW = 0, std::uint32_t baseH = 0) {
+                           const unsigned char* base = nullptr, std::uint32_t baseW = 0, std::uint32_t baseH = 0,
+                           UltraHdrFitTimings* timings = nullptr) {
+    const auto fitBegin = std::chrono::steady_clock::now();
     const std::size_t n = static_cast<std::size_t>(w) * h;
     const float wideMax = uh.gainMapMaxLog2;
     if (n == 0 || wideMax <= 0.0f || uh.gamma != 1.0f) return false;
@@ -76,6 +85,10 @@ inline bool fitAndRemapMap(const unsigned char* src, std::uint32_t w, std::uint3
         }
         for (auto& th : threads) th.join();
     }
+    if (timings) {
+        timings->histogramMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - fitBegin).count();
+    }
     std::vector<std::uint64_t> hist(kBins, 0);
     for (const auto& band : bands)
         for (int b = 0; b < kBins; ++b) hist[b] += band[b];
@@ -100,6 +113,7 @@ inline bool fitAndRemapMap(const unsigned char* src, std::uint32_t w, std::uint3
     // 256-entry LUT, Rec.709 luma, then fitted * share * Y^exp. Max with
     // the measured channels before the shoulder, so it never lowers a code.
     const bool useFloor = base != nullptr && baseW > 0 && baseH > 0 && uh.baseShare > 0.0f;
+    const bool baseSameSize = useFloor && baseW == w && baseH == h;
     float eotf[256];
     for (int i = 0; i < 256; ++i) {
         const float c = static_cast<float>(i) / 255.0f;
@@ -120,17 +134,23 @@ inline bool fitAndRemapMap(const unsigned char* src, std::uint32_t w, std::uint3
         threads.emplace_back([=, &src, &dst, &eotf] {
             for (std::uint32_t y = y0; y < y1; ++y) {
                 const std::size_t row = static_cast<std::size_t>(y) * w;
-                const std::uint32_t by = useFloor ? std::min(baseH - 1, static_cast<std::uint32_t>(
-                                                                            std::uint64_t(y) * baseH / h))
-                                                  : 0;
+                const std::uint32_t by = (useFloor && !baseSameSize)
+                                              ? std::min(baseH - 1, static_cast<std::uint32_t>(
+                                                                        std::uint64_t(y) * baseH / h))
+                                              : 0;
                 for (std::uint32_t x = 0; x < w; ++x) {
                     const std::size_t i = row + x;
                     float c[3];
                     for (int k = 0; k < 3; ++k) c[k] = static_cast<float>(src[i * 4 + k]) * inv255 * wideMax;
                     if (useFloor) {
-                        const std::uint32_t bx =
-                            std::min(baseW - 1, static_cast<std::uint32_t>(std::uint64_t(x) * baseW / w));
-                        const unsigned char* p = base + (static_cast<std::size_t>(by) * baseW + bx) * 4;
+                        const unsigned char* p;
+                        if (baseSameSize) {
+                            p = base + i * 4;
+                        } else {
+                            const std::uint32_t bx =
+                                std::min(baseW - 1, static_cast<std::uint32_t>(std::uint64_t(x) * baseW / w));
+                            p = base + (static_cast<std::size_t>(by) * baseW + bx) * 4;
+                        }
                         const float luma = 0.2126f * eotf[p[0]] + 0.7152f * eotf[p[1]] + 0.0722f * eotf[p[2]];
                         // exp2(e*log2) instead of pow: ~3x cheaper on every texel; the 8-bit quantisation below
                         // absorbs the last-ulp difference (tools/jpeg_strip_check --fit: map bytes compared).
@@ -167,6 +187,11 @@ inline bool fitAndRemapMap(const unsigned char* src, std::uint32_t w, std::uint3
         });
     }
     for (auto& th : threads) th.join();
+    if (timings) {
+        timings->remapMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - fitBegin).count() -
+            timings->histogramMs;
+    }
     return true;
 }
 
@@ -192,16 +217,16 @@ inline bool restoreHighlightColor(std::vector<unsigned char>& map, const unsigne
     // The gains of one texel. Returns false when it keeps its fitted gain (g = map code / 255 * fittedMax, inside
     // [0, fittedMax]): it cannot move the encoding range, so the range pass skips it. The SDR colour is checked first,
     // so the ~99 % of texels away from white skip the restore arithmetic.
+    const bool baseSameSize = baseW == w && baseH == h;
     const auto gains = [&](uint32_t x, uint32_t y, float* g) -> bool {
         const size_t i = size_t(y) * w + x;
-        const uint32_t bx = std::min(baseW - 1, uint32_t(uint64_t(x) * baseW / w));
-        const uint32_t by = std::min(baseH - 1, uint32_t(uint64_t(y) * baseH / h));
-        const auto* b = base + (size_t(by) * baseW + bx) * 4;
+        const auto* b = baseSameSize ? base + i * 4
+                                     : base + (size_t(std::min(baseH - 1, uint32_t(uint64_t(y) * baseH / h))) *
+                                                   baseW +
+                                               std::min(baseW - 1, uint32_t(uint64_t(x) * baseW / w))) *
+                                                  4;
         float s[3];
-        for (int k = 0; k < 3; ++k) {
-            s[k] = linear[b[k]];
-            g[k] = float(map[i * 4 + k]) / 255 * fittedMax;
-        }
+        for (int k = 0; k < 3; ++k) s[k] = linear[b[k]];
         // Restore only where the SDR lost colour: channels pressed against
         // white. A brightness ramp would also recolour well-exposed SDR
         // highlights and draw a ring at the ramp's onset.
@@ -214,7 +239,10 @@ inline bool restoreHighlightColor(std::vector<unsigned char>& map, const unsigne
         const unsigned green = unsigned(c[2]) | (unsigned(c[3]) << 8);
         if (r == 65535 && green == 65535) return false;  // invalid/black tap
         float original[3];
-        for (int k = 0; k < 3; ++k) original[k] = (s[k] + uh.offsetSdr) * boost[map[i * 4 + k]] - uh.offsetHdr;
+        for (int k = 0; k < 3; ++k) {
+            g[k] = float(map[i * 4 + k]) / 255 * fittedMax;
+            original[k] = (s[k] + uh.offsetSdr) * boost[map[i * 4 + k]] - uh.offsetHdr;
+        }
         float color[3] = {float(r) / 65535, float(green) / 65535,
                           std::max(0.0f, 1 - float(r + green) / 65535)};
         const float cy = .2126f * color[0] + .7152f * color[1] + .0722f * color[2];
@@ -251,8 +279,13 @@ inline bool restoreHighlightColor(std::vector<unsigned char>& map, const unsigne
         threads.emplace_back([&, worker] {
             for (uint32_t y = h * worker / workers; y < h * (worker + 1) / workers; ++y)
                 for (uint32_t x = 0; x < w; ++x) {
-                    float g[3]; gains(x, y, g);
+                    float g[3];
                     const size_t i = size_t(y) * w + x;
+                    if (!gains(x, y, g)) {
+                        // Inactive texels keep their fitted gain, but the code still has to be renormalised to the
+                        // expanded [encodedMin, encodedMax] range.
+                        for (int k = 0; k < 3; ++k) g[k] = float(map[i * 4 + k]) / 255 * fittedMax;
+                    }
                     for (int k = 0; k < 3; ++k)
                         map[i * 4 + k] = static_cast<unsigned char>(std::round(std::clamp((g[k] - encodedMin) * scale, 0.0f, 255.0f)));
                 }

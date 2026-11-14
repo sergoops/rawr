@@ -408,7 +408,8 @@ RenderedStillCompletion executeStillRender(RenderResources& resources, RenderCom
                                            const RenderDeviceContext& device, const RenderedStillContext& rendered,
                                            VkImage sourceImage, VkImageView sourceView, VkImage clipStateImage,
                                            VkImageView clipStateView, const std::string& filesDir,
-                                           const RenderResources::Diagnostic& emit) {
+                                           const RenderResources::Diagnostic& emit, bool resourcesPrepared,
+                                           double preparedEngineBuildMs) {
     RenderedStillCompletion done{};
     done.requestId = rendered.requestId;
     done.width = rendered.width;
@@ -421,8 +422,13 @@ RenderedStillCompletion executeStillRender(RenderResources& resources, RenderCom
     done.presentationQuarterTurns = rendered.presentationQuarterTurns;
     const auto t0 = std::chrono::steady_clock::now();
     try {
-        resources.createPixels(rendered);
-        done.engineBuildMs = resources.prepareEngines(rendered);
+        if (resourcesPrepared) {
+            done.engineBuildMs = preparedEngineBuildMs;
+            emit("STILL_RENDER_PREPARED requestId=" + std::to_string(rendered.requestId));
+        } else {
+            resources.createPixels(rendered);
+            done.engineBuildMs = resources.prepareEngines(rendered);
+        }
         const bool hasSensorClipState = clipStateView != VK_NULL_HANDLE;
         // Clip provenance: single-frame stills carry sensor CFA evidence
         // from SharedHighlightRuntime; multiframe carries the prepareRgb
