@@ -195,3 +195,25 @@ preferences, installs APKs, requires root, or leaves a camera session running.
 Application lifecycle/UI checks still use `scripts/ui` per `AGENTS.md` and require
 an awake unlocked device. Repeat quality/performance checks on physical Adreno
 hardware before declaring Mali/Adreno compatibility validated.
+
+## Still-pipeline persistence check (Stage 1 red test)
+
+The single-frame capture path currently rebuilds its demosaic pipeline and render
+engines on every shot. This check makes that regression visible and is intended
+to start passing only after the persistence work lands:
+
+```sh
+adb shell run-as com.rawr.camera.debug cat files/rawrcam_validation_current.txt > tmp/validation.txt
+adb logcat -d -v brief > tmp/logcat.txt
+uv run --no-project tools/phone-performance/stage_capture_check.py \
+  --validation tmp/validation.txt --logcat tmp/logcat.txt --min-shots 3
+```
+
+It reports per-shot demosaic timings, the number of pipeline builds, render-engine
+rebuilds and readback allocations, and exits non-zero when the engine is rebuilt
+after the first shot. `stage_log.py` is the underlying parser and can be used
+directly for JSON output. Unit tests for the parser:
+
+```sh
+uv run --no-project python tools/phone-performance/test_stage_log.py
+```

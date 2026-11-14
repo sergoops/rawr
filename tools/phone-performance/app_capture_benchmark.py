@@ -35,6 +35,8 @@ def main() -> None:
                         help="After publication, check camera closure and memory four seconds after Home")
     parser.add_argument("--home-during-capture", action="store_true",
                         help="Send the system Home gesture after shutter; requires exactly one capture")
+    parser.add_argument("--no-restart", action="store_true",
+                        help="measure the already-foreground app instead of stop/start")
     args = parser.parse_args()
     if not re.fullmatch(r"[a-zA-Z0-9_.]+", args.package) or args.samples < 1 or args.warmups < 0:
         parser.error("invalid package or sample count")
@@ -53,12 +55,61 @@ def main() -> None:
         return subprocess.run([str(ROOT / "scripts/ui"), *parts], cwd=ROOT, check=True,
                               capture_output=True, text=True, env=env).stdout
 
+    def app_pid() -> str:
+        result = subprocess.run(["adb", "shell", "pidof", args.package], capture_output=True,
+                                text=True, env=env)
+        return result.stdout.strip()
+
+    def camera_active() -> bool:
+        report = shell("dumpsys", "media.camera")
+        if "Active Camera Clients:" not in report:
+            return False
+        active = report.split("Active Camera Clients:", 1)[1].split("Allowed user IDs:", 1)[0]
+        return args.package in active
+
+    def wait_for_camera(timeout: float = 20.0) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if camera_active():
+                return
+            time.sleep(0.5)
+        raise RuntimeError("app camera did not become active")
+
+    def wait_for_stable_pid(timeout: float = 20.0) -> str:
+        deadline = time.monotonic() + timeout
+        last = ""
+        while time.monotonic() < deadline:
+            current = app_pid()
+            if re.fullmatch(r"\d+", current):
+                if current == last:
+                    return current
+                last = current
+            else:
+                last = ""
+            time.sleep(0.5)
+        raise RuntimeError("app process did not become stable")
+
     original = shell("getprop", "debug.rawr.jpeg_stream").strip()
     logcat: subprocess.Popen[str] | None = None
     records: list[dict] = []
     try:
         shell("setprop", "debug.rawr.jpeg_stream", "0" if args.variant == "contiguous" else "1")
-        ui("app")
+        if args.no_restart:
+            pid = wait_for_stable_pid()
+        else:
+            ui("stop")
+            deadline = time.monotonic() + 10.0
+            while app_pid():
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("app process did not stop")
+                time.sleep(0.2)
+            time.sleep(2.0)
+            ui("app")
+            pid = wait_for_stable_pid()
+        wait_for_camera()
+        # Camera HAL reports active before the capture pipeline is ready for the
+        # first shutter; give the app a moment or the first tap can be ignored.
+        time.sleep(2.0)
         (args.output / "ui-before.txt").write_text(ui("state"))
         (args.output / "thermal-before.txt").write_text(shell("dumpsys", "thermalservice"))
         (args.output / "memory-before.txt").write_text(shell("dumpsys", "meminfo", args.package))
@@ -67,11 +118,16 @@ def main() -> None:
                       "debug.rawr.mali_fair_queue", "debug.rawr.cached_readback")
         (args.output / "debug-properties.json").write_text(json.dumps(
             {name: shell("getprop", name).strip() for name in properties}, indent=2))
-        pid = shell("pidof", args.package).strip()
-        if not re.fullmatch(r"\d+", pid):
-            raise RuntimeError("expected exactly one foreground app process")
-        logcat = subprocess.Popen(["adb", "logcat", "--pid", pid, "-T", "1", "-v", "monotonic"],
+        # Do not filter by --pid: on this device the app process can be
+        # replaced after the pid check but before/while logcat attaches, which
+        # leaves logcat bound to a stale pid and produces an empty log.  The
+        # CAPTURE_JPEG_PUBLISHED token is unique to Rawr, so a global stream is
+        # safe and survives an app restart.
+        logcat = subprocess.Popen(["adb", "logcat", "-T", "1", "-v", "monotonic"],
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+        time.sleep(1.0)
+        if app_pid() != pid:
+            raise RuntimeError("app process changed while attaching logcat")
         events: queue.Queue[dict] = queue.Queue()
 
         def read_log() -> None:
@@ -82,6 +138,11 @@ def main() -> None:
                     log.flush()
                     found = EVENT.search(line)
                     if found:
+                        # Global logcat can include other Rawr builds.  Keep only
+                        # lines emitted by the process we just stabilized.
+                        pid_match = re.match(r"\S+\s+(\d+)\s+", line)
+                        if pid_match and int(pid_match.group(1)) != int(pid):
+                            continue
                         request, success, start, end, elapsed = found.groups()
                         events.put(dict(requestId=int(request), success=success == "true",
                                         requestedNs=int(start), publishedNs=int(end), elapsedMs=float(elapsed)))
@@ -90,21 +151,28 @@ def main() -> None:
         reader.start()
         seen: set[int] = set()
         for index in range(args.warmups + args.samples):
-            ui("tap", "capture_shutter")
-            if args.home_during_capture:
-                ui("home", "--gesture")
-            deadline = time.monotonic() + 120
-            while True:
+            event = None
+            accepted = False
+            for attempt in range(3):
+                ui("tap", "capture_shutter")
+                if args.home_during_capture:
+                    ui("home", "--gesture")
                 try:
-                    event = events.get(timeout=min(2, max(0.1, deadline - time.monotonic())))
+                    event = events.get(timeout=10)
                 except queue.Empty:
-                    if logcat.poll() is not None or time.monotonic() >= deadline or shell("pidof", args.package).strip() != pid:
+                    if app_pid() != pid or logcat.poll() is not None:
                         raise RuntimeError("capture timed out or application process exited; run is incomplete") from None
-                    continue
+                    if attempt < 2:
+                        time.sleep(1.0)
+                        continue
+                    raise RuntimeError("capture timed out or application process exited; run is incomplete") from None
                 if event["requestId"] in seen:
                     continue
                 seen.add(event["requestId"])
+                accepted = True
                 break
+            if not accepted:
+                raise RuntimeError("capture retries produced no new request id")
             if not event["success"]:
                 raise RuntimeError(f"JPEG publication failed: {event}")
             measured = (event["publishedNs"] - event["requestedNs"]) / 1_000_000
@@ -144,7 +212,8 @@ def main() -> None:
         try:
             shell("setprop", "debug.rawr.jpeg_stream", original)
         finally:
-            ui("stop")
+            if not args.no_restart:
+                ui("stop")
 
 
 if __name__ == "__main__":

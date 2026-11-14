@@ -86,6 +86,7 @@ class StillCaptureCoordinator(
         check(!closing) { "Capture coordinator is closing" }
         val requestedAtNs = android.os.SystemClock.elapsedRealtimeNanos()
         if (BuildConfig.DEBUG) Log.i(TAG, "CAPTURE_PRESS token=$requestedAtNs monoMs=${System.nanoTime() / 1e6} format=$format")
+        Log.i(TAG, "REXTURE_TIMING requestId=0 stage=press monoMs=${System.nanoTime() / 1e6} format=$format")
         StillProcessingService.acquire(application, this)
         val snapshot = settings().copy(dngEnabled = format.dng, jpegEnabled = format.jpeg)
         val releaseAssets = com.rawr.camera.settings.preferences.CaptureLutPins.acquire(
@@ -351,6 +352,7 @@ class StillCaptureCoordinator(
                     requestedAtNs = input.requestedAtNs
                 )
             Log.i(TAG, "CAPTURE_ACCEPTED requestId=$requestId requestedNs=${input.requestedAtNs} jpeg=${output.jpeg != null}")
+            Log.i(TAG, "REXTURE_TIMING requestId=$requestId stage=accepted monoMs=${System.nanoTime() / 1e6}")
             if (zslPersistRequested) {
                 val baseName = output.jobName.removeSuffix(".dng")
                 ContextCompat.startForegroundService(
@@ -484,6 +486,7 @@ class StillCaptureCoordinator(
                     val publishedAtNs = android.os.SystemClock.elapsedRealtimeNanos()
                     Log.i(TAG, "CAPTURE_JPEG_PUBLISHED requestId=$requestId success=${publication.success} " +
                         "requestedNs=$requested publishedNs=$publishedAtNs elapsedMs=${(publishedAtNs - requested) / 1_000_000.0}")
+                    Log.i(TAG, "REXTURE_TIMING requestId=$requestId stage=publish monoMs=${System.nanoTime() / 1e6}")
                 }
                 publication.uri?.let(onJpegPublished)
                 state.jpegDone = true

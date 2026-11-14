@@ -24,6 +24,7 @@
 #include "capture/multiframe/RzslCaptureWriter.h"
 #include "capture/multiframe/StripMerge.h"
 #include "capture/multiframe/mfsr/MergeProcessor.h"
+#include "capture/multiframe/mfsr/RextureTiming.h"
 #include "capture/persistence/CaptureJob.h"
 #include "capture/persistence/FrameRecipe.h"
 #include "capture/persistence/ProcessingRecipe.h"
@@ -141,6 +142,11 @@ void MfsrCaptureJob::runStages(Published& published) {
     const bool nativeRgb = work->tuning.mergeAlgorithm == kMergeAlgorithmRexture && jpegRequested &&
                            mergedJpeg.develop.multiframeNativeRgb;
     const bool dumpRzslRequested = work->dumpRzslRequested;
+    LOGI("REXTURE_CONFIG requestId=%llu algorithm=%u frames=%zu nativeRgb=%d jpegRequested=%d baseDng=%d "
+         "mergedDng=%d raw=%ux%u",
+         static_cast<unsigned long long>(requestId), work->tuning.mergeAlgorithm, job->frames.size(),
+         nativeRgb ? 1 : 0, jpegRequested ? 1 : 0, baseDng.outputFd.valid() ? 1 : 0,
+         mergedDng.outputFd.valid() ? 1 : 0, ctx.rawWidth, ctx.rawHeight);
     {
         // Pre-merge footprint: the arena grows with the window geometry, and
         // HDR+ Quality keeps every journaled frame resident (Rexture
@@ -379,6 +385,7 @@ void MfsrCaptureJob::runStages(Published& published) {
     };
     std::optional<rawr::raw_multiframe_output::PackedRaw16> stitched;
     try {
+        rextureTiming(requestId, "merge_start");
         auto& coordinator = ctx.burstCoordinator;
         if (stripMode) {
             // Each window: its rows of every frame from the journal, merged and
@@ -451,6 +458,7 @@ void MfsrCaptureJob::runStages(Published& published) {
                                               tuning, dumpRzslRequested, queueSubmit, mergeSubmit);
         }
         if (work->awaitDurable) work->awaitDurable();  // outputs follow: the journal must be durable first
+        rextureTiming(requestId, "merge_done");
         startBaseDng();
         // Merge timings feed both horizons (merged DNG and JPEG). Populate
         // here — not inside the merged-DNG gate below — so JPEG-only captures
@@ -530,6 +538,7 @@ void MfsrCaptureJob::runStages(Published& published) {
                 auto mergedPacked = stitched ? std::move(*stitched) : projectMerged(*mergeResult);
                 if (!stitched) projectMs = wallMs(projectBegin);
                 mergedFrame = makeCaptured(std::move(mergedPacked));
+                rextureTiming(requestId, "project_done");
                 // DNG BlackLevel/WhiteLevel follow the widened code range.
                 for (auto& black : mergedFrame->metadata.blackLevelPhysicalRggb) black *= projection.codeScale;
                 mergedFrame->metadata.effectiveWhiteLevel *= projection.codeScale;
@@ -642,6 +651,7 @@ void MfsrCaptureJob::runStages(Published& published) {
                 else
                     outputAdapter.preparePackedCfa(mergeResult->outputView, lsc.width, lsc.height, lsc.gains, sensorClip);
                 rgbPrepMs = wallMs(rgbPrepBegin);
+                rextureTiming(requestId, "rgb_prep_done");
                 sensorClipOrApplied = outputAdapter.sensorClipOrApplied();
                 LOGI("MULTIFRAME_SENSOR_CLIP applied=%d ref=%ux%u out=%ux%u", sensorClipOrApplied ? 1 : 0,
                      sensorClip.refWidth, sensorClip.refHeight, mergeResult->outputExtent.width,
@@ -805,6 +815,7 @@ void MfsrCaptureJob::runStages(Published& published) {
                 LOGI("MULTIFRAME_JPEG_INPUT mode=merged_cfa demosaic=%s requestId=%llu raw=%ux%u setupMs=%.1f demosaicMs=%.1f",
                      outputInfo.demosaicLabel.c_str(), static_cast<unsigned long long>(requestId), mergedW, mergedH,
                      demosaicDone->setupMs, demosaicMs);
+                rextureTiming(requestId, "demosaic_done");
 
                 const rawrcam::color::math::Vec3 whiteBalanceRgb =
                     rawrcam::color::collapseRggbToRgb(job->referenceColor.baselineWbRggb);
@@ -910,6 +921,7 @@ void MfsrCaptureJob::runStages(Published& published) {
                 // preview submit behind it in queue0's FIFO. Same family, so
                 // no ownership transfers; CPU fence-waits already order the
                 // demosaic -> render handoff across queues.
+                rextureTiming(requestId, "render_start");
                 if (!rendered.start(ctx.vulkan, ctx.queue0Mutex, renderedContext, demosaicedImage, demosaicedView,
                                     clipStateImage, clipStateView, useMfQueue ? mfQueue : VK_NULL_HANDLE,
                                     useMfQueue ? &ctx.vulkan.mfSubmitMutex() : nullptr)) {
@@ -922,6 +934,7 @@ void MfsrCaptureJob::runStages(Published& published) {
                         std::this_thread::sleep_for(std::chrono::milliseconds(5));
                     }
                 }
+                rextureTiming(requestId, "render_done");
                 if (renderedDone->filmFallbackMemory) {
                     persistence::markFilmFallback(persistence::jobPath(ctx.filesDir, baseDisplayName));
                     mergedJpeg.output.outputFd.reset();
@@ -995,6 +1008,7 @@ void MfsrCaptureJob::runStages(Published& published) {
                     const bool mfUltraHdr = jpegContext.output.ultraHdr.enabled && rendered.gainmapPixelData() &&
                                             rendered.gainmapPixelBytes() > 0;
                     bool mfWriterAccepted = false;
+                    rextureTiming(requestId, "jpeg_start");
                     if (mfUltraHdr) {
                         mfWriterAccepted = jpegWriter.startUltraHdr(
                             requestId, rendered.pixelData(), rendered.pixelBytes(), renderedDone->width,
@@ -1018,8 +1032,10 @@ void MfsrCaptureJob::runStages(Published& published) {
                             std::this_thread::sleep_for(std::chrono::milliseconds(5));
                         }
                     }
+                    rextureTiming(requestId, "jpeg_done");
                     publishJpeg(*jpegDone);
                     jpegPublished = true;
+                    rextureTiming(requestId, "publish");
                     rendered.releasePixels();
                 }
             } catch (const std::exception& e) {
