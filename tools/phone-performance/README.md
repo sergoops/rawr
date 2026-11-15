@@ -15,8 +15,8 @@ timestamps and UI gfx counters do not measure sensor-to-display latency.
 ## Actual app benchmark (opens the camera: obtain user go-ahead first)
 
 Build `:app:assembleBenchmark` for an R8-optimized, non-debuggable, debug-signed
-`com.rawr.camera.benchmark` APK with test tags. It installs alongside the user's
-app. Use `UI_PKG=com.rawr.camera.benchmark scripts/ui` for all interactions;
+`com.oops.rawr.camera.benchmark` APK with test tags. It installs alongside the user's
+app. Use `UI_PKG=com.oops.rawr.camera.benchmark scripts/ui` for all interactions;
 Settings deep links are not exported in this variant, so navigate by test tags.
 Full app timing is enqueue-to-successful publication, measured with one monotonic
 clock. It includes provider work and processing but not any self-timer before enqueue.

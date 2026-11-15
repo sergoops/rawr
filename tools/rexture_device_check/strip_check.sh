@@ -6,7 +6,7 @@
 set -eu
 bin=$1; burst=$2; n=$(basename "$burst"); dev=/data/local/tmp/rx_strip
 ab=$(python3 -I -c "import json;m=json.load(open('$burst/meta.json'));print('%r,%r'%(m['noise_a'],m['noise_b']))")
-adb shell "am force-stop com.rawr.camera" >/dev/null 2>&1 || true
+adb shell "am force-stop com.oops.rawr.camera" >/dev/null 2>&1 || true
 adb shell "mkdir -p $dev" && adb push "$bin" $dev/check >/dev/null && adb shell "chmod +x $dev/check"
 adb shell "test -d $dev/$n" || adb push "$burst" $dev/ >/dev/null
 ref=

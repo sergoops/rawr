@@ -20,7 +20,7 @@ assert sdk, 'Set ANDROID_HOME'
 aapt = Path(sdk) / 'build-tools/36.0.0/aapt2'
 badging = subprocess.check_output([str(aapt), 'dump', 'badging', str(apk)], text=True)
 assert 'application-debuggable' not in badging, 'Debuggable release'
-assert "package: name='com.rawr.camera'" in badging, 'Unexpected release package'
+assert "package: name='com.oops.rawr.camera'" in badging, 'Unexpected release package'
 with zipfile.ZipFile(apk) as archive:
     names = archive.namelist()
     assert 'lib/arm64-v8a/librawrcam_native.so' in names

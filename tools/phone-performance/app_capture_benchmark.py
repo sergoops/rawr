@@ -26,7 +26,7 @@ EVENT = re.compile(r"CAPTURE_JPEG_PUBLISHED requestId=(\d+) success=(true|false)
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--package", default="com.rawr.camera.benchmark")
+    parser.add_argument("--package", default="com.oops.rawr.camera.benchmark")
     parser.add_argument("--variant", choices=("contiguous", "segmented"), required=True)
     parser.add_argument("--samples", type=int, default=20)
     parser.add_argument("--warmups", type=int, default=3)

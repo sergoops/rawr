@@ -21,7 +21,7 @@ def main():
     if not 15 <= args.seconds <= 120:
         parser.error("seconds must be 15–120")
     args.output.mkdir(parents=True, exist_ok=False)
-    package = "com.rawr.camera.benchmark"
+    package = "com.oops.rawr.camera.benchmark"
     env = dict(os.environ, UI_PKG=package)
 
     def shell(*parts):

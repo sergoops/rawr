@@ -21,7 +21,8 @@ export ANDROID_HOME=/path/to/android-sdk
 
 Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
 Install explicitly with `adb install -r <apk>`. The debug application ID is
-`com.rawr.camera.debug`; release uses `com.rawr.camera`.
+`com.oops.rawr.camera.debug`; release uses `com.oops.rawr.camera`. The `oops`
+build type (`:app:assembleOops`) is a debug-signed release build for daily use.
 
 See [build and signing](docs/build.md), [native architecture](app/src/main/cpp/ARCHITECTURE.md),
 and [native modules](native/README.md).

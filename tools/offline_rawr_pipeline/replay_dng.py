@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 
-PKG = "com.rawr.camera.debug"
+PKG = "com.oops.rawr.camera.debug"
 ACTIVITY = f"{PKG}/com.rawr.camera.renderer.RendererDngReplayActivity"
 
 
