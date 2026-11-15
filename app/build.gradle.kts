@@ -85,6 +85,7 @@ android {
         getByName("debug").java.srcDir("src/fixtures/kotlin")
         getByName("testRelease").java.srcDir("src/fixtures/kotlin")
         maybeCreate("testBenchmark").java.srcDir("src/fixtures/kotlin")
+        maybeCreate("testOops").java.srcDir("src/fixtures/kotlin")
     }
 
     // Lowest precedence: the git-ignored signing/release.properties (keystore path relative to the repo root).
@@ -127,6 +128,11 @@ android {
             initWith(getByName("release"))
             applicationIdSuffix = ".benchmark"
             resValue("string", "app_name", "OOPS Rawr Benchmark")
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
+        create("oops") {
+            initWith(getByName("release"))
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
         }
