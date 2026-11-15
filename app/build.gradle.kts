@@ -43,7 +43,7 @@ android {
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "com.rawr.camera"
+        applicationId = "com.oops.rawr.camera"
         minSdk = 33
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
@@ -110,7 +110,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            resValue("string", "app_name", "Rawr Debug")
+            resValue("string", "app_name", "OOPS Rawr Debug")
             // Native EXIF Software tag; must match BuildConfig.VERSION_NAME.
             externalNativeBuild { cmake { arguments += "-DRAWR_VERSION_NAME=${debugVersionName.get()}" } }
         }
@@ -126,7 +126,7 @@ android {
         create("benchmark") {
             initWith(getByName("release"))
             applicationIdSuffix = ".benchmark"
-            resValue("string", "app_name", "Rawr Benchmark")
+            resValue("string", "app_name", "OOPS Rawr Benchmark")
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
         }
