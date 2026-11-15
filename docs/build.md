@@ -41,9 +41,21 @@ The check verifies non-debuggable packaging, arm64 libraries, alignment, and
 memory-mapped assets, and prints APK/DEX sizes. Preserve release mapping and
 native symbol outputs with your private release records.
 
-A private key cannot update the old debug-signed `com.rawr.camera` installation;
-export needed files and reinstall. Future updates must retain the private key
-and increase `versionCode`. Publishing is manual.
+The `oops` variant is a debug-signed release build for daily use on a device:
+it installs as `com.oops.rawr.camera`, separately from the official
+`com.rawr.camera`, and does not share app data with it. A private release key
+cannot update the debug-signed `oops` install; uninstall first. Future updates
+must retain the same key and increase `versionCode`. Publishing is manual.
+
+## OOPS daily build
+
+```sh
+./gradlew :app:assembleOops
+adb install -r app/build/outputs/apk/oops/app-oops.apk
+```
+
+The variant is non-debuggable and minified, uses the current `main` sources,
+and is signed with the local debug key.
 
 ## Local tooling
 

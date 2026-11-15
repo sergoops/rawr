@@ -19,7 +19,7 @@ dump is enough to find, tap and check a control. Commands:
   ui seq "tap a" "wait b"  several commands in one call; stops at the first failure
 
 <sel> is a resource-id, or `text:Foo` / `desc:Foo` (exact match) for untagged controls.
-Env: UI_PKG (default com.rawr.camera.debug), ANDROID_SERIAL for multiple devices.
+Env: UI_PKG (default com.oops.rawr.camera.debug), ANDROID_SERIAL for multiple devices.
 Always `ui stop` when done: an open camera app drains the battery and heats the phone.
 """
 import difflib
@@ -32,7 +32,7 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-PKG = os.environ.get("UI_PKG", "com.rawr.camera.debug")
+PKG = os.environ.get("UI_PKG", "com.oops.rawr.camera.debug")
 SHOTS = Path(__file__).resolve().parent.parent / "tmp" / "ui"
 BOUNDS = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 

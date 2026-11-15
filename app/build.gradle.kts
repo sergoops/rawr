@@ -43,7 +43,7 @@ android {
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "com.rawr.camera"
+        applicationId = "com.oops.rawr.camera"
         minSdk = 33
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
@@ -85,6 +85,7 @@ android {
         getByName("debug").java.srcDir("src/fixtures/kotlin")
         getByName("testRelease").java.srcDir("src/fixtures/kotlin")
         maybeCreate("testBenchmark").java.srcDir("src/fixtures/kotlin")
+        maybeCreate("testOops").java.srcDir("src/fixtures/kotlin")
     }
 
     // Lowest precedence: the git-ignored signing/release.properties (keystore path relative to the repo root).
@@ -110,7 +111,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            resValue("string", "app_name", "Rawr Debug")
+            resValue("string", "app_name", "OOPS Rawr Debug")
             // Native EXIF Software tag; must match BuildConfig.VERSION_NAME.
             externalNativeBuild { cmake { arguments += "-DRAWR_VERSION_NAME=${debugVersionName.get()}" } }
         }
@@ -126,7 +127,12 @@ android {
         create("benchmark") {
             initWith(getByName("release"))
             applicationIdSuffix = ".benchmark"
-            resValue("string", "app_name", "Rawr Benchmark")
+            resValue("string", "app_name", "OOPS Rawr Benchmark")
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
+        create("oops") {
+            initWith(getByName("release"))
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
         }

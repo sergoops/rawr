@@ -21,7 +21,7 @@ def main():
     if not 1 <= args.cycles <= 10:
         parser.error("cycles must be 1–10")
     args.output.mkdir(parents=True, exist_ok=False)
-    package = "com.rawr.camera.benchmark"
+    package = "com.oops.rawr.camera.benchmark"
     env = dict(os.environ, UI_PKG=package)
 
     def adb(*parts):

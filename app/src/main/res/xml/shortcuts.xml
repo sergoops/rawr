@@ -8,7 +8,7 @@
         android:shortcutShortLabel="@string/renderer_shortcut_short">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="com.rawr.camera"
+            android:targetPackage="com.oops.rawr.camera"
             android:targetClass="com.rawr.camera.renderer.RendererActivity" />
     </shortcut>
 </shortcuts>

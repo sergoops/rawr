@@ -7,7 +7,7 @@
 set -eu
 bin=$1; out=$2; mode=$3; shift 3
 dev=/data/local/tmp/rx
-adb shell "am force-stop com.rawr.camera; am force-stop com.rawr.camera.benchmark" >/dev/null 2>&1 || true
+adb shell "am force-stop com.oops.rawr.camera; am force-stop com.oops.rawr.camera.benchmark" >/dev/null 2>&1 || true
 adb shell "mkdir -p $dev" && adb push "$bin" $dev/rexture_device_check >/dev/null && adb shell "chmod +x $dev/rexture_device_check"
 mkdir -p "$out"
 adb shell getprop ro.product.model > "$out/model.txt"; adb shell dumpsys battery | grep -i "temperature" >> "$out/model.txt" || true
@@ -34,4 +34,4 @@ time)
   done ;;
 *) echo "unknown mode $mode" >&2; exit 2 ;;
 esac
-adb shell "am force-stop com.rawr.camera; am force-stop com.rawr.camera.benchmark" >/dev/null 2>&1 || true
+adb shell "am force-stop com.oops.rawr.camera; am force-stop com.oops.rawr.camera.benchmark" >/dev/null 2>&1 || true
